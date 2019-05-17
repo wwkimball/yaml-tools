@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+################################################################################
+# Sorts Array data found at the end of a YAML Path.
+#
+# Requirements:
+# 1. Python >= 3.6
+#    * CentOS:  yum -y install epel-release \
+#        && yum -y install python36 python36-pip
+# 2. The ruamel.yaml module, version >= 0.15
+#    * CentOS:  pip3 install ruamel.yaml
+#
+# Copyright 2019 William W. Kimball, Jr. MBA MSIS
+################################################################################
+import sys
+import argparse
+from os import access, R_OK
+from os.path import isfile
+
+from ruamel.yaml import YAML
+from ruamel.yaml.parser import ParserError
+
+from yamlpath.exceptions import YAMLPathException, EYAMLCommandException
+from yamlpath.enums import PathSeperators
+from yamlpath.eyaml import EYAMLPath
+
+from yamlpath.wrappers import ConsolePrinter
+
+# Implied Constants
+MY_VERSION = "1.0.2"
+
+def processcli():
+    """Process command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Sorts data elements found at a specific YAML Path.  Can\
+            employ EYAML to sort encrypted values.",
+        epilog="For more information about YAML Paths, please visit\
+            https://github.com/wwkimball/yamlpath."
+    )
+    parser.add_argument("-V", "--version", action="version",
+                        version="%(prog)s " + MY_VERSION)
+
+    required_group = parser.add_argument_group("required settings")
+    required_group.add_argument(
+        "-p", "--path",
+        required=True,
+        metavar="YAML_PATH",
+        help="YAML Path indicating nodes to sort"
+    )
+
+    parser.add_argument("-t", "--pathsep",
+        default="auto",
+        choices=[l.lower() for l in PathSeperators.get_names()],
+        type=str.lower,
+        help="force the separator in YAML_PATH when inference fails"
+    )
+
+    eyaml_group = parser.add_argument_group(
+        "EYAML options", "Left unset, the EYAML keys will default to your\
+         system or user defaults.  Both keys must be set either here or in\
+         your system or user EYAML configuration file when using EYAML.")
+    eyaml_group.add_argument("-x", "--eyaml", default="eyaml",
+        help="the eyaml binary to use when it isn't on the PATH")
+    eyaml_group.add_argument("-r", "--privatekey", help="EYAML private key")
+    eyaml_group.add_argument("-u", "--publickey", help="EYAML public key")
+
+    noise_group = parser.add_mutually_exclusive_group()
+    noise_group.add_argument("-d", "--debug", action="store_true",
+        help="output debugging details")
+    noise_group.add_argument("-v", "--verbose", action="store_true",
+        help="increase output verbosity")
+    noise_group.add_argument("-q", "--quiet", action="store_true",
+        help="suppress all output except errors")
+
+    parser.add_argument("yaml_file", metavar="YAML_FILE",
+        help="the YAML file to query")
+    return parser.parse_args()
+
+def validateargs(args, log):
+    """Validate command-line arguments."""
+    has_errors = False
+
+    # Enforce sanity
+    # * When set, --privatekey must be a readable file
+    if args.privatekey and not (
+        isfile(args.privatekey) and access(args.privatekey, R_OK)
+    ):
+        log.error(
+            "EYAML private key is not a readable file:  " + args.privatekey
+        )
+
+    # * When set, --publickey must be a readable file
+    if args.publickey and not (
+        isfile(args.publickey) and access(args.publickey, R_OK)
+    ):
+        log.error(
+            "EYAML public key is not a readable file:  " + args.publickey
+        )
+
+    # * When either --publickey or --privatekey are set, the other must also be
+    if (
+        (args.publickey and not args.privatekey)
+        or (args.privatekey and not args.publickey)
+    ):
+        log.error("Both private and public EYAML keys must be set.")
+
+    if has_errors:
+        exit(1)
+
+def main():
+    """Main code."""
+    args = processcli()
+    log = ConsolePrinter(args)
+    validateargs(args, log)
+    processor = EYAMLPath(
+        log,
+        eyaml=args.eyaml,
+        publickey=args.publickey,
+        privatekey=args.privatekey,
+        pathsep=args.pathsep,
+    )
+
+    # Prep the YAML parser
+    yaml = YAML()
+    yaml.indent(mapping=2, sequence=4, offset=2)
+    yaml.explicit_start = True
+    yaml.preserve_quotes = True
+    yaml.width = sys.maxsize
+
+    # Attempt to open the YAML file; check for parsing errors
+    try:
+        with open(args.yaml_file, 'r') as f:
+            yaml_data = yaml.load(f)
+    except ParserError as ex:
+        log.critical(
+            "YAML parsing error {}:  {}"
+            .format(str(ex.problem_mark).lstrip(), ex.problem)
+            , 1
+        )
+
+    # Seek the queried value(s)
+    discovered_nodes = []
+    try:
+        for node in processor.get_eyaml_values(
+            yaml_data, args.path, mustexist=True
+        ):
+            if node is not None:
+                log.debug("Got {} from {}.".format(node, args.path))
+                discovered_nodes.append(node)
+    except YAMLPathException as ex:
+        log.critical(ex, 1)
+    except EYAMLCommandException as ex:
+        log.critical(ex, 2)
+
+    if not discovered_nodes:
+        log.critical("No matches for {}!".format(args.path), 3)
+
+
+
+if __name__ == "__main__":
+    main()
