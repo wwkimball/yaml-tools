@@ -166,7 +166,7 @@ def main():
         log.critical("No matches for {}!".format(yaml_path), 3)
 
     for node in discovered_nodes:
-        if isinstance(node, list) or isinstance(node, dict):
+        if isinstance(node, (dict, list)):
             print(json.dumps(node))
         else:
             print("{}".format(str(node).replace("\n", r"\n")))

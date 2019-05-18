@@ -1,3 +1,10 @@
+1.2.4:
+Bug Fixes:
+* yaml-set v1.0.2 now preserves newlines for pre-folded EYAML values when saving
+  the old encrypted value to another node.
+* ruamel.yaml v0.15.96 is now the minimum acceptable version in order to adopt
+  better round-trip editing.
+
 1.2.3
 Enhancements:
 * Set minimum compatible versions of Python and ruamel.yaml in order to ensure

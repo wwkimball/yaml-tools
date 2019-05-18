@@ -34,7 +34,7 @@ import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
-MY_VERSION = "1.0.1"
+MY_VERSION = "1.0.2"
 
 def processcli():
     """Process command-line arguments."""
@@ -294,9 +294,27 @@ def main():
             )
 
         log.verbose("Saving the old value to {}.".format(args.saveto))
+
+        # Folded EYAML values have their embedded newlines converted to spaces
+        # when read.  As such, writing them back out breaks their original
+        # format, despite being properly typed.  To restore the original
+        # written form, reverse the conversion, here.
+        old_value = change_nodes[0]
+        old_format = YAMLValueFormats.from_node(old_value)
+        if (
+            (old_format is YAMLValueFormats.FOLDED
+                or old_format is YAMLValueFormats.LITERAL
+            )
+            and EYAMLPath.is_eyaml_value(old_value)
+        ):
+            old_value = old_value.replace(" ", "\n")
+
         try:
             processor.set_value(
-                yaml_data, args.saveto, processor.clone_node(change_nodes[0])
+                yaml_data,
+                args.saveto,
+                processor.clone_node(old_value),
+                value_format=old_format,
             )
         except YAMLPathException as ex:
             log.critical(ex, 1)

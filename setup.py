@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="yamlpath",
-    version="1.2.3",
+    version="1.2.4",
     description="Generally-useful YAML and EYAML tools employing a human-friendly YAML Path",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -29,7 +29,7 @@ setuptools.setup(
     ],
     python_requires=">3.6.0",
     install_requires=[
-        "ruamel.yaml>=0.15.95",
+        "ruamel.yaml>=0.15.96",
     ],
     tests_require=[
         "pytest",

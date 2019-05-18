@@ -501,7 +501,7 @@ def test_wrap_type(val, typ):
   assert isinstance(YAMLPath.wrap_type(val), typ)
 
 def test_default_for_child_none(yamlpath):
-  assert isinstance(yamlpath._default_for_child(None, ""), str)
+  assert isinstance(yamlpath.default_for_child(None, ""), str)
 
 @pytest.mark.parametrize("path,typ", [
   ([(True, False)], ScalarBoolean),
@@ -510,7 +510,7 @@ def test_default_for_child_none(yamlpath):
   ([(float, 1.1)], ScalarFloat),
 ])
 def test_default_for_child(yamlpath, path, typ):
-  assert isinstance(yamlpath._default_for_child(path, path[0][1]), typ)
+  assert isinstance(yamlpath.default_for_child(path, path[0][1]), typ)
 
 def test_notimplementeds(yamlpath, yamldata):
   with pytest.raises(NotImplementedError):
@@ -584,15 +584,15 @@ def test_get_elements_by_none_refs(yamlpath, yamldata):
   (1.1, YAMLValueFormats.FLOAT),
 ])
 def test_update_value(yamlpath, yamldata, newval, newform):
-  yamlpath._update_value(yamldata, yamldata["top_scalar"], newval, newform)
+  yamlpath.update_node(yamldata, yamldata["top_scalar"], newval, newform)
 
 @pytest.mark.parametrize("newval,newform", [
   ("4F", YAMLValueFormats.INT),
   ("4.F", YAMLValueFormats.FLOAT),
 ])
 def test_bad_update_value(yamlpath, yamldata, newval, newform):
-  with pytest.raises(SystemExit):
-    yamlpath._update_value(yamldata, yamldata["top_scalar"], newval, newform)
+  with pytest.raises(ValueError):
+    yamlpath.update_node(yamldata, yamldata["top_scalar"], newval, newform)
 
 def test_yamlpath_exception():
   try:
