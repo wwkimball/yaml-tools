@@ -101,7 +101,9 @@ def validateargs(args, log):
             "EYAML public key is not a readable file:  " + args.publickey
         )
 
-    # * When either --publickey or --privatekey are set, the other must also be
+    # * When either --publickey or --privatekey are set, the other must also
+    #   be.  This is because the `eyaml` command requires them both when
+    #   decrypting values.
     if (
         (args.publickey and not args.privatekey)
         or (args.privatekey and not args.publickey)

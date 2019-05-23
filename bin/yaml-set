@@ -34,7 +34,7 @@ import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
-MY_VERSION = "1.0.2"
+MY_VERSION = "1.0.3"
 
 def processcli():
     """Process command-line arguments."""
@@ -98,8 +98,8 @@ def processcli():
 
     eyaml_group = parser.add_argument_group(
         "EYAML options", "Left unset, the EYAML keys will default to your\
-         system or user defaults.  Both keys must be set either here or in\
-         your system or user EYAML configuration file when using EYAML.")
+         system or user defaults.  You do not need to supply a private key\
+         unless you enable --check and the old value is encrypted.")
     eyaml_group.add_argument("-e", "--eyamlcrypt", action="store_true",
         help="encrypt the new value using EYAML")
     eyaml_group.add_argument("-x", "--eyaml", default="eyaml",
@@ -161,14 +161,6 @@ def validateargs(args, log):
         log.error(
             "EYAML public key is not a readable file:  " + args.publickey
         )
-
-    # * When either --publickey or --privatekey are set, the other must also be
-    if (
-        (args.publickey and not args.privatekey)
-        or (args.privatekey and not args.publickey)
-    ):
-        has_errors = True
-        log.error("Both private and public EYAML keys must be set.")
 
     if has_errors:
         exit(1)
@@ -240,26 +232,9 @@ def main():
                 continue
 
             log.debug('Got "{}" from {}.'.format(node, change_path))
-            if processor.is_eyaml_value(node):
-                old_value = processor.decrypt_eyaml(node)
-            else:
-                old_value = node
-
-            # Do nothing if the value will not be changing, unless this is an
-            # EYAML recrypt attempt (same value, encrypted or even
-            # re-encrypted).
-            if (new_value is not node
-                and new_value == old_value
-                and not args.eyamlcrypt
-            ):
-                log.warning("New and old values are identical.")
-                continue
-
             change_nodes.append(node)
     except YAMLPathException as ex:
         log.critical(ex, 1)
-    except EYAMLCommandException as ex:
-        log.critical(ex, 2)
 
     if not change_nodes:
         log.warning("Nothing to do!")
@@ -272,13 +247,33 @@ def main():
     if args.check:
         for node in change_nodes:
             if processor.is_eyaml_value(node):
-                check_value = processor.decrypt_eyaml(node)
+                # Sanity check:  If either --publickey or --privatekey were set
+                # then they must both be set in order to decrypt this value.
+                # This is enforced only when the value must be decrypted due to
+                # a --check request.
+                if (
+                    (args.publickey and not args.privatekey)
+                    or (args.privatekey and not args.publickey)
+                ):
+                    log.error(
+                        "Neither or both private and public EYAML keys must be"
+                        + " set when --check is required to decrypt the old"
+                        + " value."
+                    )
+                    exit(1)
+
+                try:
+                    check_value = processor.decrypt_eyaml(node)
+                except EYAMLCommandException as ex:
+                    log.critical(ex, 1)
             else:
                 check_value = node
 
             if not args.check == check_value:
                 log.critical(
-                    "{} does not match the check value.".format(node), 20
+                    '"{}" does not match the check value.'
+                    .format(args.check),
+                    20
                 )
 
     # Save the old value, if desired and possible

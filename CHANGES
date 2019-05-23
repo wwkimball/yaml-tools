@@ -1,3 +1,9 @@
+1.2.5:
+Bug Fixes:
+* yaml-set v1.0.3 no longer requires --privatekey unless decryption is requested
+  via enabling --check.  As a side-effect, the script will also no longer ignore
+  requests to set the same value as was already set.
+
 1.2.4:
 Bug Fixes:
 * yaml-set v1.0.2 now preserves newlines for pre-folded EYAML values when saving
