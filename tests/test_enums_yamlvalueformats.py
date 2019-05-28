@@ -13,43 +13,50 @@ from ruamel.yaml.scalarint import ScalarInt
 
 from yamlpath.enums import YAMLValueFormats
 
-@pytest.mark.parametrize("check_type,for_node", [
-	(YAMLValueFormats.DEFAULT, None),
-    (YAMLValueFormats.FOLDED, FoldedScalarString("")),
-    (YAMLValueFormats.LITERAL, LiteralScalarString("")),
-    (YAMLValueFormats.DQUOTE, DoubleQuotedScalarString("")),
-    (YAMLValueFormats.SQUOTE, SingleQuotedScalarString("")),
-    (YAMLValueFormats.BARE, PlainScalarString("")),
-	(YAMLValueFormats.BOOLEAN, ScalarBoolean(False)),
-	(YAMLValueFormats.INT, ScalarInt(10)),
-	(YAMLValueFormats.FLOAT, ScalarFloat(1.1)),
-])
-def test_best_type_for_node(check_type, for_node):
-	assert check_type == YAMLValueFormats.from_node(for_node)
 
-@pytest.mark.parametrize("check_type,for_name", [
-    (YAMLValueFormats.BARE, "bare"),
-    (YAMLValueFormats.BARE, "BARE"),
-	(YAMLValueFormats.BOOLEAN, "boolean"),
-	(YAMLValueFormats.BOOLEAN, "BOOLEAN"),
-	(YAMLValueFormats.DEFAULT, "default"),
-	(YAMLValueFormats.DEFAULT, "DEFAULT"),
-    (YAMLValueFormats.DQUOTE, "dquote"),
-    (YAMLValueFormats.DQUOTE, "DQUOTE"),
-	(YAMLValueFormats.FLOAT, "float"),
-	(YAMLValueFormats.FLOAT, "FLOAT"),
-    (YAMLValueFormats.FOLDED, "folded"),
-    (YAMLValueFormats.FOLDED, "FOLDED"),
-	(YAMLValueFormats.INT, "int"),
-	(YAMLValueFormats.INT, "INT"),
-    (YAMLValueFormats.LITERAL, "literal"),
-    (YAMLValueFormats.LITERAL, "LITERAL"),
-    (YAMLValueFormats.SQUOTE, "squote"),
-    (YAMLValueFormats.SQUOTE, "SQUOTE"),
-])
-def test_name_from_str(check_type, for_name):
-    assert check_type == YAMLValueFormats.from_str(for_name)
+class Test_enums_YAMLValueFormats():
+	"""Tests for the YAMLValueFormats enumeration."""
+	def test_get_names(self):
+		assert YAMLValueFormats.get_names() == [
+			"BARE",
+			"BOOLEAN",
+			"DEFAULT",
+			"DQUOTE",
+			"FLOAT",
+			"FOLDED",
+			"INT",
+			"LITERAL",
+			"SQUOTE",
+		]
 
-def test_unknown_name_from_str():
-    with pytest.raises(NameError):
-        _ = YAMLValueFormats.from_str("THIS NAME DOES NOT EXIST!")
+	@pytest.mark.parametrize("input,output", [
+		("BARE", YAMLValueFormats.BARE),
+		("BOOLEAN", YAMLValueFormats.BOOLEAN),
+		("DEFAULT", YAMLValueFormats.DEFAULT),
+		("DQUOTE", YAMLValueFormats.DQUOTE),
+		("FLOAT", YAMLValueFormats.FLOAT),
+		("FOLDED", YAMLValueFormats.FOLDED),
+		("INT", YAMLValueFormats.INT),
+		("LITERAL", YAMLValueFormats.LITERAL),
+		("SQUOTE", YAMLValueFormats.SQUOTE),
+	])
+	def test_from_str(self, input, output):
+		assert output == YAMLValueFormats.from_str(input)
+
+	def test_from_str_nameerror(self):
+		with pytest.raises(NameError):
+			YAMLValueFormats.from_str("NO SUCH NAME")
+
+	@pytest.mark.parametrize("input,output", [
+		(FoldedScalarString(""), YAMLValueFormats.FOLDED),
+		(LiteralScalarString(""), YAMLValueFormats.LITERAL),
+		(DoubleQuotedScalarString(''), YAMLValueFormats.DQUOTE),
+		(SingleQuotedScalarString(""), YAMLValueFormats.SQUOTE),
+		(PlainScalarString(""), YAMLValueFormats.BARE),
+		(ScalarBoolean(False), YAMLValueFormats.BOOLEAN),
+		(ScalarFloat(1.01), YAMLValueFormats.FLOAT),
+		(ScalarInt(10), YAMLValueFormats.INT),
+		(None, YAMLValueFormats.DEFAULT),
+	])
+	def test_from_node(self, input, output):
+		assert output == YAMLValueFormats.from_node(input)

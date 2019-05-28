@@ -1,3 +1,20 @@
+2.0.0:
+Enhancements:
+* Added Collectors to YAML Path expressions.  These take the form of "(YAML
+  Path)" -- parenthesis () are used to demarcate each Collector -- resulting in
+  a list of zero or more matches for the sub-query.  Operators between
+  Collectors include + and -, like "(...)+(...)", "(...)-(...)", and nested
+  Collectors are possible, like "(...)-((...)+(...))".  Collectors may appear
+  anywhere within the outer YAML Path, effectively setting the point within the
+  data at which each Collector is rooted.
+* A major code refactoring was undertaken to break YAMLPath out as its own class
+  and improve code quality (per mypy and pylint).
+
+Bug Fixes:
+* yaml-set v1.0.4 now implies --mustexist when --saveto is set.  Otherwise,
+  --saveto was trying to save nothing when --change (without --mustexist)
+  pointed nowhere.
+
 1.2.5:
 Bug Fixes:
 * yaml-set v1.0.3 no longer requires --privatekey unless decryption is requested

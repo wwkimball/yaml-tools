@@ -1,0 +1,4 @@
+[run]
+omit =
+	# Don't bother with ruamel.yaml patches (not my code)
+	yamlpath/patches/emitter_write_folded_fix.py

@@ -1,4 +1,6 @@
-from yamlpath.enums.yamlvalueformats import YAMLValueFormats
-from yamlpath.enums.pathsegmenttypes import PathSegmentTypes
-from yamlpath.enums.pathsearchmethods import PathSearchMethods
-from yamlpath.enums.pathseperators import PathSeperators
+"""Make all the YAML Path enumerations available."""
+from .yamlvalueformats import YAMLValueFormats
+from .pathsegmenttypes import PathSegmentTypes
+from .pathsearchmethods import PathSearchMethods
+from .pathseperators import PathSeperators
+from .collectoroperators import CollectorOperators

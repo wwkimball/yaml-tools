@@ -7,14 +7,15 @@ python:
   - 3.6
 
 install:
-  - pip install --upgrade ruamel.yaml pytest pytest-cov pycodestyle coveralls
+  - pip install --upgrade ruamel.yaml mypy pytest pytest-cov pylint coveralls
   - gem install hiera-eyaml
 
 script:
   - pip install -e .
-  - pytest --verbose --cov=yamlpath --cov-report=term-missing --cov-fail-under=90 tests
+  - mypy yamlpath
+  - pylint yamlpath
+  - pytest --verbose --cov=yamlpath --cov-report=term-missing --cov-fail-under=98 tests
   - coveralls
-  - pycodestyle yamlpath
 
 deploy:
   provider: pypi

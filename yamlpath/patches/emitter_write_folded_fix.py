@@ -1,8 +1,10 @@
-"""Patches bugs in ruamel.yaml unless or until they are patched in the
-ruamel.yaml package itself.
+"""
+Patches bugs in ruamel.yaml unless or until they are patched in the ruamel.yaml
+package itself.
 
 Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
+from typing import Any
 from ruamel.yaml.emitter import (
     Emitter,
     EmitterError,
@@ -11,7 +13,7 @@ from ruamel.yaml.emitter import (
 
 # Stop Emitter.write_folded from injecting unnecessary new-lines
 def write_folded_fix(self, text):
-    # type: (Any) -> None
+    # type: (Emitter, Any) -> None
     hints, _indent, _indicator = self.determine_block_hints(text)
     self.write_indicator(u'>' + hints, True)
     if _indicator == u'+':

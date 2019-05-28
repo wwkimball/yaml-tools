@@ -1,5 +1,3 @@
-import yamlpath.exceptions
-import yamlpath.enums
-import yamlpath
+"""Core YAML Path classes."""
 from yamlpath.yamlpath import YAMLPath
-from yamlpath.parser import Parser
+from yamlpath.processor import Processor

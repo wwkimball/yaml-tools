@@ -1,4 +1,5 @@
-"""Implements a reusable console print facility for simple command-line scripts.
+"""
+Implements a reusable console print facility for simple command-line scripts.
 Other implementations can easily wrap Python's standard logger/warning modules,
 but this one does not because those are overkill for *simple* STDOUT/STDERR
 printing (that must support squelching).
@@ -15,32 +16,32 @@ import sys
 
 
 class ConsolePrinter:
-    """Generally-useful console messager, writing INFO, VERBOSE, WARN, and DEBUG
+    """
+    Generally-useful console messager, writing INFO, VERBOSE, WARN, and DEBUG
     messages to STDOUT as well as ERROR messages to STDERR with multi-lne
-    formatting."""
+    formatting.
+
+    Positional Parameters:
+        1. args (object) An object representing log level settings with these
+           properties:
+            - debug (Boolean) true = write debugging informational messages
+            - verbose (Boolean) true = write verbose informational messages
+            - quiet (Boolean) true = write only error messages
+
+    Returns:  N/A
+
+    Raises:  N/A
+    """
 
     def __init__(self, args):
-        """Init this class.
-
-        Positional Parameters:
-          1. args (object) An object representing log level settings with these
-             properties:
-             - debug (Boolean) true = write debugging informational messages
-             - verbose (Boolean) true = write verbose informational messages
-             - quiet (Boolean) true = write only error messages
-
-        Returns:  N/A
-
-        Raises:  N/A
-        """
         self.args = args
 
     def info(self, message):
-        """Writes an informational message to STDOUT unless quiet mode is
-        active.
+        """
+        Writes an informational message to STDOUT unless quiet mode is active.
 
         Positional Parameters:
-          1. message (str) The message to print
+            1. message (str) The message to print
 
         Returns:  N/A
 
@@ -50,11 +51,12 @@ class ConsolePrinter:
             print(message)
 
     def verbose(self, message):
-        """Writes a verbose message to STDOUT when verbose mode is active unless
+        """
+        Writes a verbose message to STDOUT when verbose mode is active unless
         quiet mode is active.
 
         Positional Parameters:
-          1. message (str) The message to print
+            1. message (str) The message to print
 
         Returns:  N/A
 
@@ -64,10 +66,11 @@ class ConsolePrinter:
             print(message)
 
     def warning(self, message):
-        """Writes a warning message to STDOUT unless quiet mode is active.
+        """
+        Writes a warning message to STDOUT unless quiet mode is active.
 
         Positional Parameters:
-          1. message (str) The message to print
+            1. message (str) The message to print
 
         Returns:  N/A
 
@@ -77,13 +80,14 @@ class ConsolePrinter:
             print("WARNING:  " + str(message).replace("\n", "\nWARNING:  "))
 
     def error(self, message, exit_code=None):
-        """Writes a recoverable error message to STDERR and optionally
-        terminates the program, exiting with a specific error code.
+        """
+        Writes a recoverable error message to STDERR and optionally terminates
+        the program, exiting with a specific error code.
 
         Positional Parameters:
-          1. message (str) The message to print
-          2. exit_code (int) The exit code to terminate the program
-             with; default=None
+            1. message (str) The message to print
+            2. exit_code (int) The exit code to terminate the program
+               with; default=None
 
         Returns:  N/A
 
@@ -98,16 +102,18 @@ class ConsolePrinter:
 
         # Optionally terminate program execution with a specified exit code
         if exit_code is not None:
+            self.debug("Terminating with exit code, {}.".format(exit_code))
             exit(exit_code)
 
     def critical(self, message, exit_code=1):
-        """Writes a critical, nonrecoverable failure message to STDERR and
+        """
+        Writes a critical, nonrecoverable failure message to STDERR and
         terminates the program, exiting with a specific error code.
 
         Positional Parameters:
-          1. message (str) The message to print
-          2. exit_code (int) The exit code to terminate the program
-             with; default=1
+            1. message (str) The message to print
+            2. exit_code (int) The exit code to terminate the program
+               with; default=1
 
         Returns:  N/A
 
@@ -120,15 +126,17 @@ class ConsolePrinter:
         sys.stdout.flush()
 
         # Terminate program execution with a specified exit code
+        self.debug("Terminating with exit code, {}.".format(exit_code))
         exit(exit_code)
 
     def debug(self, message):
-        """Writes a debug message to STDOUT unless quiet mode is active, dumping
+        """
+        Writes a debug message to STDOUT unless quiet mode is active, dumping
         all key-value pairs of a dictionary or all elements of a list, when the
         message is either.
 
         Positional Parameters:
-          1. message (str) The message to print
+            1. message (str) The message to print
 
         Returns:  N/A
 
@@ -151,8 +159,9 @@ class ConsolePrinter:
                     print("DEBUG:  [" + str(k) + "]=>" + str(vattr))
             else:
                 attr = ""
-                if (hasattr(message, "anchor")
-                    and message.anchor.value is not None
+                if (
+                        hasattr(message, "anchor")
+                        and message.anchor.value is not None
                 ):
                     attr = "; &" + message.anchor.value
                 mattr = (str(message) + attr).replace("\n", "\nDEBUG:  ")

@@ -5,8 +5,8 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="yamlpath",
-    version="1.2.5",
-    description="Generally-useful YAML and EYAML tools employing a human-friendly YAML Path",
+    version="2.0.0",
+    description="Read and change YAML/Compatible data using powerful, intuitive, command-line friendly syntax",
     long_description=long_description,
     long_description_content_type="text/markdown",
     classifiers=[
@@ -20,7 +20,7 @@ setuptools.setup(
     author="William W. Kimball, Jr., MBA, MSIS",
     author_email="github-yamlpath@kimballstuff.com",
     license="ISC",
-    keywords="yaml eyaml",
+    keywords="yaml eyaml yaml-path",
     packages=setuptools.find_packages(),
     scripts=[
         "bin/eyaml-rotate-keys",

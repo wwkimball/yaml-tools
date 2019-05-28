@@ -1,8 +1,10 @@
-"""Implements the YAMLValueFormats enumeration.
+"""
+Implements the YAMLValueFormats enumeration.
 
 Copyright 2019 William W. Kimball, Jr. MBA MSIS
 """
 from enum import Enum, auto
+from typing import Any, List
 
 from ruamel.yaml.scalarstring import (
     PlainScalarString,
@@ -17,7 +19,42 @@ from ruamel.yaml.scalarint import ScalarInt
 
 
 class YAMLValueFormats(Enum):
-    """Supported representation formats for YAML values."""
+    """
+    Supported representation formats for YAML values.  These include:
+
+    `BARE`
+        The value is written as-is, when possible, with neither demarcation nor
+        reformatting.  The YAML parser may convert the format to something else
+        if it deems necessary.
+
+    `BOOLEAN`
+        The value is written as a bare True or False.
+
+    `DEFAULT`
+        The value is written in whatever format is deemed most appropriate.
+
+    `DQUOTE`
+        The value is demarcated via quotation-marks (").
+
+    `FLOAT`
+        The value is written as a bare floating-point decimal.
+
+    `FOLDED`
+        An otherwise long single-line string is written as a multi-line value
+        which YAML data parsers can read back as the original single-line
+        string.
+
+    `INT`
+        The value is written as a bare integer number with no fractional
+        component.
+
+    `LITERAL`
+        A multi-line string is written as-is, preserving newline characters and
+        any other white-space.
+
+    `SQUOTE`
+        The value is demarcated via apostrophes (').
+    """
     BARE = auto()
     BOOLEAN = auto()
     DEFAULT = auto()
@@ -29,52 +66,55 @@ class YAMLValueFormats(Enum):
     SQUOTE = auto()
 
     @staticmethod
-    def get_names():
-        """Returns all entry names for this enumeration.
+    def get_names() -> List[str]:
+        """
+        Returns all entry names for this enumeration.
 
-        Positional Parameters:  N/A
+        Parameters:  N/A
 
-        Returns:  (list) Upper-case names from this enumeration
+        Returns:  (List[str]) Upper-case names from this enumeration
 
         Raises:  N/A
         """
         return [entry.name.upper() for entry in YAMLValueFormats]
 
     @staticmethod
-    def from_str(name):
+    def from_str(name: str) -> "YAMLValueFormats":
         """Converts a string value to a value of this enumeration, if valid.
 
-        Positional Parameters:
-          1. name (str) The name to convert
+        Parameters:
+            1. name (str) The name to convert
 
         Returns:  (YAMLValueFormats) the converted enumeration value
 
         Raises:
-          NameError when name doesn't match any enumeration values.
+            - `NameError` when name doesn't match any enumeration values.
         """
-        check = str(name).upper()
+        check: str = str(name).upper()
         if check in YAMLValueFormats.get_names():
             return YAMLValueFormats[check]
-        raise NameError("YAMLValueFormats has no such item, " + check)
+        raise NameError(
+            "YAMLValueFormats has no such item:  {}"
+            .format(name))
 
     @staticmethod
-    def from_node(node):
+    def from_node(node: Any) -> "YAMLValueFormats":
         """Identifies the best matching enumeration value from a sample data
         node.  Will return YAMLValueFormats.DEFAULT if the node is None or its
         best match cannot be determined.
 
         Parameters:
-          1. node (ruamel.yaml data node) The node to type
+            1. node (Any) The node to type
 
         Returns:  (YAMLValueFormats) one of the enumerated values
 
         Raises:  N/A
         """
-        best_type = YAMLValueFormats.DEFAULT
+        best_type: YAMLValueFormats = YAMLValueFormats.DEFAULT
         if node is None:
             return best_type
 
-        node_type = type(node)
+        node_type: type = type(node)
         if node_type is FoldedScalarString:
             best_type = YAMLValueFormats.FOLDED
         elif node_type is LiteralScalarString:

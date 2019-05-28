@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
-################################################################################
-# Retrieves one or more values from a YAML file at a specified YAML Path.
-# Output is printed to STDOUT, one line per match.  When a result is a complex
-# data-type (Array or Hash), a Python-compatible dump is produced to represent
-# the entire complex result.  EYAML can be employed to decrypt the values.
-#
-# Requirements:
-# 1. Python >= 3.6
-#    * CentOS:  yum -y install epel-release \
-#        && yum -y install python36 python36-pip
-# 2. The ruamel.yaml module, version >= 0.15
-#    * CentOS:  pip3 install ruamel.yaml
-#
-# Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
-################################################################################
+# pylint: disable=locally-disabled,invalid-name
+"""
+Retrieves one or more values from a YAML file at a specified YAML Path.
+Output is printed to STDOUT, one line per match.  When a result is a complex
+data-type (Array or Hash), a JSON dump is produced to represent each complex
+result.  EYAML can be employed to decrypt the values.
+
+Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
+"""
 import sys
 import argparse
 import json
@@ -23,21 +17,25 @@ from os.path import isfile
 from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
 
-from yamlpath.exceptions import YAMLPathException, EYAMLCommandException
+from yamlpath import YAMLPath
+from yamlpath.exceptions import YAMLPathException
+from yamlpath.eyaml.exceptions import EYAMLCommandException
 from yamlpath.enums import PathSeperators
-from yamlpath.parser import Parser
-from yamlpath.eyaml import EYAMLPath
+from yamlpath.eyaml import EYAMLProcessor
 
 from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
-MY_VERSION = "1.0.2"
+MY_VERSION = "1.0.3"
 
 def processcli():
     """Process command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Gets one or more values from a YAML file at a specified\
-            YAML Path.  Can employ EYAML to decrypt values.",
+        description="Retrieves one or more values from a YAML file at a\
+            specified YAML Path.  Output is printed to STDOUT, one line per\
+            result.  When a result is a complex data-type (Array or Hash), a\
+            JSON dump is produced to represent it.  EYAML can be employed to\
+            decrypt the values.",
         epilog="For more information about YAML Paths, please visit\
             https://github.com/wwkimball/yamlpath."
     )
@@ -52,7 +50,8 @@ def processcli():
         help="YAML Path to query"
     )
 
-    parser.add_argument("-t", "--pathsep",
+    parser.add_argument(
+        "-t", "--pathsep",
         default="auto",
         choices=[l.lower() for l in PathSeperators.get_names()],
         type=str.lower,
@@ -63,20 +62,29 @@ def processcli():
         "EYAML options", "Left unset, the EYAML keys will default to your\
          system or user defaults.  Both keys must be set either here or in\
          your system or user EYAML configuration file when using EYAML.")
-    eyaml_group.add_argument("-x", "--eyaml", default="eyaml",
+    eyaml_group.add_argument(
+        "-x", "--eyaml",
+        default="eyaml",
         help="the eyaml binary to use when it isn't on the PATH")
     eyaml_group.add_argument("-r", "--privatekey", help="EYAML private key")
     eyaml_group.add_argument("-u", "--publickey", help="EYAML public key")
 
     noise_group = parser.add_mutually_exclusive_group()
-    noise_group.add_argument("-d", "--debug", action="store_true",
+    noise_group.add_argument(
+        "-d", "--debug",
+        action="store_true",
         help="output debugging details")
-    noise_group.add_argument("-v", "--verbose", action="store_true",
+    noise_group.add_argument(
+        "-v", "--verbose",
+        action="store_true",
         help="increase output verbosity")
-    noise_group.add_argument("-q", "--quiet", action="store_true",
+    noise_group.add_argument(
+        "-q", "--quiet",
+        action="store_true",
         help="suppress all output except errors")
 
-    parser.add_argument("yaml_file", metavar="YAML_FILE",
+    parser.add_argument(
+        "yaml_file", metavar="YAML_FILE",
         help="the YAML file to query")
     return parser.parse_args()
 
@@ -87,7 +95,7 @@ def validateargs(args, log):
     # Enforce sanity
     # * When set, --privatekey must be a readable file
     if args.privatekey and not (
-        isfile(args.privatekey) and access(args.privatekey, R_OK)
+            isfile(args.privatekey) and access(args.privatekey, R_OK)
     ):
         log.error(
             "EYAML private key is not a readable file:  " + args.privatekey
@@ -95,7 +103,7 @@ def validateargs(args, log):
 
     # * When set, --publickey must be a readable file
     if args.publickey and not (
-        isfile(args.publickey) and access(args.publickey, R_OK)
+            isfile(args.publickey) and access(args.publickey, R_OK)
     ):
         log.error(
             "EYAML public key is not a readable file:  " + args.publickey
@@ -105,8 +113,8 @@ def validateargs(args, log):
     #   be.  This is because the `eyaml` command requires them both when
     #   decrypting values.
     if (
-        (args.publickey and not args.privatekey)
-        or (args.privatekey and not args.publickey)
+            (args.publickey and not args.privatekey)
+            or (args.privatekey and not args.publickey)
     ):
         log.error("Both private and public EYAML keys must be set.")
 
@@ -118,14 +126,7 @@ def main():
     args = processcli()
     log = ConsolePrinter(args)
     validateargs(args, log)
-    parser = Parser(log, pathsep=args.pathsep)
-    processor = EYAMLPath(
-        log,
-        eyaml=args.eyaml,
-        publickey=args.publickey,
-        privatekey=args.privatekey,
-        parser=parser
-    )
+    yaml_path = YAMLPath(args.query, pathsep=args.pathsep)
 
     # Prep the YAML parser
     yaml = YAML()
@@ -135,9 +136,12 @@ def main():
     yaml.width = sys.maxsize
 
     # Attempt to open the YAML file; check for parsing errors
+
     try:
         with open(args.yaml_file, 'r') as f:
             yaml_data = yaml.load(f)
+    except FileNotFoundError:
+        log.critical("YAML_FILE not found:  {}".format(args.yaml_file), 2)
     except ParserError as ex:
         log.critical(
             "YAML parsing error {}:  {}"
@@ -147,18 +151,13 @@ def main():
 
     # Seek the queried value(s)
     discovered_nodes = []
+    processor = EYAMLProcessor(
+        log, yaml_data, eyaml=args.eyaml,
+        publickey=args.publickey, privatekey=args.privatekey)
     try:
-        yaml_path = parser.str_path(args.query)
-    except YAMLPathException as ex:
-        log.critical(ex, 1)
-
-    try:
-        for node in processor.get_eyaml_values(
-            yaml_data, yaml_path, mustexist=True
-        ):
-            if node is not None:
-                log.debug("Got {} from {}.".format(node, yaml_path))
-                discovered_nodes.append(node)
+        for node in processor.get_eyaml_values(yaml_path, mustexist=True):
+            log.debug("Got {} from {}.".format(repr(node), yaml_path))
+            discovered_nodes.append(node)
     except YAMLPathException as ex:
         log.critical(ex, 1)
     except EYAMLCommandException as ex:

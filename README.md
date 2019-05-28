@@ -8,14 +8,14 @@
 Contents:
 
 1. [Introduction](#introduction)
-2. [Installing](#installing)
-3. [Supported YAML Path Forms](#supported-yaml-path-forms)
-4. [Based on ruamel.yaml and Python 3](#based-on-ruamelyaml-and-python-3)
-   1. [Compatible ruamel.yaml Versions](#compatible-ruamelyaml-versions)
-5. [The Files of This Project](#the-files-of-this-project)
+2. [Illustration](#illustration)
+3. [Installing](#installing)
+4. [Supported YAML Path Segments](#supported-yaml-path-segments)
+5. [Based on ruamel.yaml and Python 3](#based-on-ruamelyaml-and-python-3)
+6. [The Files of This Project](#the-files-of-this-project)
    1. [Command-Line Tools](#command-line-tools)
    2. [Libraries](#libraries)
-6. [Basic Usage](#basic-usage)
+7. [Basic Usage](#basic-usage)
    1. [Basic Usage:  Command-Line Tools](#basic-usage--command-line-tools)
       1. [Rotate Your EYAML Keys](#rotate-your-eyaml-keys)
       2. [Get a YAML Value](#get-a-yaml-value)
@@ -27,151 +27,188 @@ Contents:
 
 ## Introduction
 
-This project presents and utilizes YAML Paths, which are a human-friendly means
-of identifying one or more nodes within [YAML](https://yaml.org/),
+This project presents and utilizes YAML Paths, which are a powerful, intuitive
+means of identifying one *or more* nodes within [YAML](https://yaml.org/),
 [EYAML](https://github.com/voxpupuli/hiera-eyaml), or compatible data structures
-like JSON.  Both dot-notation (inspired by
+like [JSON](https://www.json.org/).  Both dot-notation (inspired by
 [Hiera](https://github.com/puppetlabs/hiera)) and forward-slash-notation
 (influenced by [XPath](https://www.w3schools.com/xml/xml_xpath.asp)) are
 supported.  The [libraries](#libraries) (modules) and several [command-line tool
-implementations](#command-line-tools) are provided.  So, you can build YAML Path
-right into your own application or easily use its capabilities right away from
-the command-line.
+implementations](#command-line-tools) are provided.  With these, you can build
+YAML Path support right into your own application or easily use its capabilities
+right away from the command-line to retrieve or update YAML/Compatible data.
 
-This implementation of YAML Path is a query language in addition to a node
-descriptor.  With it, you can select a single precise node or search for any
-number of nodes which match criteria that can be expressed in several ways.
-Keys, values, and elements can all be searched at any number of levels within
-the data structure using the same query.
+This implementation of YAML Path is a *query language* in addition to a *node
+descriptor*.  With it, you can describe or select a single precise node or
+search for any number of nodes that match some criteria.  Keys, values, and
+elements can all be searched at any number of levels within the data structure
+using the same query.  Collectors can also be used to gather and further select
+from otherwise disparate parts of the source data.
 
-Other "yaml-path" projects exist but they fill different needs for much more
-narrow applications.  This implementation was created specifically to enable
-selecting and editing YAML -- and compatible, like JSON -- data of any
-complexity via an intuitive, expressive syntax.  Starting with the ubiquitous --
-albeit limited -- dot-notation for accessing Hash members, this YAML Path
-solution grew to include new syntax for:
+## Illustration
 
-* Array elements
-* Anchors by name
-* Search expressions for single or multiple matches
-* Forward-slash (XPath-like) notation
-
-To illustrate some of these concepts, consider this sample YAML data:
+To illustrate some of these concepts, consider these samples:
 
 ```yaml
 ---
-# Sample YAML data
-aliases:
-  - &commonUsername username
-  - &commonPassword 5uP3r 53kr17 P@55\/\/0rD
-
-configuration::application:
-  'general.settings':
-    slash\key: ENC[some-lengthy-EYAML-value]
-    'a.dotted.subkey':
-      - element1
-      - element2
-      - element3
-
-sensitive::accounts:
-  database:
-    app_user: *commonUsername
-    app_pass: *commonPassword
-  application:
-    db:
-      users:
-        - name: admin
-          pass: 1s0L@73d @cC0u|\|7
-          access_level: 0
-        - name: *commonUsername
-          pass: *commonPassword
-          access_level: 500
+hash:
+  child_attr:
+    key: 5280
 ```
 
-This YAML data sample contains these single-result YAML Paths (note there are
-multiple ways to represent the same YAML Path):
+This value, `5280`, can be identified via YAML Path as any of:
 
-Dot Notation                                                           | Forward-Slash Notation
------------------------------------------------------------------------|------------------------------------------------------------------
-`aliases[&commonUsername]`                                             | `/aliases[&commonUsername]`
-`aliases[&commonPassword]`                                             | `/aliases[&commonPassword]`
-`configuration::application.'general.settings'.slash\\key`             | `/configuration::application/general.settings/slash\\key`
-`configuration::application.'general.settings'.'a.dotted.subkey'[0]`   | `/configuration::application/general.settings/a.dotted.subkey[0]`
-`configuration::application.'general.settings'.'a.dotted.subkey'[1]`   | `/configuration::application/general.settings/a.dotted.subkey[1]`
-`configuration::application.'general.settings'.'a.dotted.subkey'.2`    | `/configuration::application/general.settings/a.dotted.subkey/2`
-`sensitive::accounts.database.app_user`                                | `/sensitive::accounts/database/app_user`
-`sensitive::accounts.database.app_pass`                                | `/sensitive::accounts/database/app_pass`
-`sensitive::accounts.application.db.users[0].name`                     | `/sensitive::accounts/application/db/users[0]/name`
-`sensitive::accounts.application.db.users[0].pass`                     | `/sensitive::accounts/application/db/users[0]/pass`
-`sensitive::accounts.application.db.users.0.access_level`              | `/sensitive::accounts/application/db/users/0/access_level`
-`sensitive::accounts.application.db.users[name=admin].name`            | `/sensitive::accounts/application/db/users[name=admin]/name`
-`sensitive::accounts.application.db.users[name=admin].pass`            | `/sensitive::accounts/application/db/users[name=admin]/pass`
-`sensitive::accounts.application.db.users[name=admin].access_level`    | `/sensitive::accounts/application/db/users[name=admin]/access_level`
-`sensitive::accounts.application.db.users.1.name`                      | `/sensitive::accounts/application/db/users/1/name`
-`sensitive::accounts.application.db.users[1].pass`                     | `/sensitive::accounts/application/db/users[1]/pass`
-`sensitive::accounts.application.db.users[1].access_level`             | `/sensitive::accounts/application/db/users[1]/access_level`
-`sensitive::accounts.application.db.users[name=username].name`         | `/sensitive::accounts/application/db/users[name=username]/name`
-`sensitive::accounts.application.db.users[name=username].pass`         | `/sensitive::accounts/application/db/users[name=username]/pass`
-`sensitive::accounts.application.db.users[name=username].access_level` | `/sensitive::accounts/application/db/users[name=username]/access_level`
+1. `hash.child_attr.key` (dot-notation)
+2. `hash.child_attr[.=key]` (search all child keys for one named, `key`, and
+   yield its value)
+3. `/hash/child_attr/key` (same as 1 but in forward-slash notation)
+4. `/hash/child_attr[.=key]` (same as 2 but in forward-slash notation)
 
-You could also access some of these sample nodes using search expressions, like:
+```yaml
+---
+aliases:
+  - &first_anchor Simple string value
+```
 
-Dot Notation                                                                          | Forward-Slash Notation
---------------------------------------------------------------------------------------|------------------------------------------------------------------
-`configuration::application.general\.settings.'a.dotted.subkey'[.=~/^element[1-2]$/]` | `/configuration::application/general.settings/a.dotted.subkey[.=~/^element[1-2]$/]`
-`configuration::application.general\.settings.'a.dotted.subkey'[0:-2]`                | `/configuration::application/general.settings/a.dotted.subkey[0:-2]`
-`sensitive::accounts.application.db.users[name=admin].access_level`                   | `/sensitive::accounts/application/db/users[name=admin]/access_level`
-`sensitive::accounts.application.db.users[access_level<500].name`                     | `/sensitive::accounts/application/db/users[access_level<500]/name`
+With YAML Path, you can select this anchored value by any of these equivalent
+expressions:
 
-## Supported YAML Path Forms
+1. `aliases[0]` (explicit array element number)
+2. `aliases.0` (implicit array element number in dot-notation)
+3. `aliases[&first_anchor]` (search by Anchor name)
+4. `aliases[.^Simple]` (search for any elements starting with "Simple")
+5. `aliases[.%string]` (search for any elements containing "string")
+6. `aliases[.$value]` (search for any elements ending with "value")
+7. `aliases[.=~/^(\b[Ss][a-z]+\s){2}[a-z]+$/]` (search for any elements matching
+   a complex Regular Expression, which happens to match the example)
+8. `/aliases[0]` (same as 1 but in forward-slash notation)
+9. `/aliases/0` (same as 2 but in forward-slash notation)
+10. `/aliases[&first_anchor]` (same as 3 but in forward-slash notation)
 
-YAML Path understands these forms:
+```yaml
+---
+users:
+  - name: User One
+    password: ENC[PKCS7,MIIBiQY...Jk==]
+    roles:
+      - Writers
+  - name: User Two
+    password: ENC[PKCS7,MIIBiQY...vF==]
+    roles:
+      - Power Users
+      - Editors
+```
 
-* Top-level Array element selection: `[#]` or `/[#]` where `#` is the 0-based element number (`#` can also be negative, causing the element to be selected from the end of the Array)
-* Top-level Hash key selection: `key` or `/key`
-* Top-level (Hash) Anchor lookups: `&anchor_name` or `/&anchor_name` (the `&` is required to indicate you are seeking an Anchor by name)
+With an example like this, YAML Path enables:
+
+* selection of single nodes: `/users/0/roles/0` = `Writers`
+* all children nodes of any given parent: `/users/1/roles` =
+  `["Power Users", "Editors"]`
+* searching by a child attribute: `/users[name="User One"]/password` =
+  `Some decrypted value, provided you have the appropriate EYAML keys`
+* pass-through selections against arrays-of-hashes: `/users/roles` =
+  `["Writers"]\n["Power Users", "Editors"]` (each user's list of roles are a
+  seperate result)
+* collection of disparate results: `(/users/name)` =
+  `["User One", "User Two"]` (all names appear in a single result instead of
+  one per line)
+
+For a deeper exploration of YAML Path's capabilities, please visit the
+[project Wiki](https://github.com/wwkimball/yamlpath/wiki).
+
+## Supported YAML Path Segments
+
+A YAML Path *segment* is the text between seperators which identifies a parent
+or leaf node within the data structure.  For dot-notation, a path like
+`hash.key` identifies two segments:  `hash` (a parent node) and `key` (a leaf
+node).  The same path in forward-slash notation would be:  `/hash/key`.
+
+YAML Path understands these segment types:
+
+* Top-level Hash key selection: `key`
+* Explicit top-level array element selection: `[#]` where `#` is the zero-based
+  element number; `#` can also be negative, causing the element to be selected
+  from the end of the Array
+* Implicit array element selection **or** numbered hash key selection: `#`
+  where `#` is the 0-based element number **or** exact name of a hash key which
+  is itself a number
+* Top-level (Hash) Anchor lookups: `&anchor_name` (the `&` is required to
+  indicate you are seeking an Anchor by name)
 * Hash sub-keys:  `hash.child.key` or `/hash/child/key`
-* Demarcation for dotted Hash keys:  `hash.'dotted.child.key'` or `hash."dotted.child.key"` (not necessary when using forward-slash notation, `/hash/dotted.child.key`)
-* Named Array element selection:  `array[#]` or `/array[#]` where `array` is the name of the Hash key containing Array data and `#` is the 0-based element number (`#` can also be negative, causing the element to be selected from the end of the Array)
-* Anchor lookups in named Arrays:  `array[&anchor_name]` or `/array[&anchor_name]` where `array` is the name of the Hash key containing Array data and the `&` is required to indicate you are seeking an Anchor by name
-* Array slicing: `array[start#:stop#]` or `/array[start#:stop#]` where `start#` is the first, zero-based element and `stop#` is the last element to select (either or both can be negative, causing the elements to be selected from the end of the Array)
-* Hash slicing: `hash[min:max]` or `/hash[min:max]` where `min` and `max` are alphanumeric terms between which the Hash's keys are compared
-* Escape symbol recognition:  `hash.dotted\.child\.key` or `/hash/dotted.child.key`, and `keys_with_\\slashes` or `/keys_with_\\slashes`
+* Demarcation for dotted Hash keys:  `hash.'dotted.child.key'` or
+  `hash."dotted.child.key"` (not necessary when using forward-slash notation,
+  `/hash/dotted.child.key`)
+* Named Array element selection:  `array[#]`, `array.#`, `/array[#]`, or
+  `/array/#` where `array` is the name of the Hash key containing Array data
+  and `#` is the 0-based element number
+* Anchor lookups in named Arrays:  `array[&anchor_name]`  where `array` is the
+  name of the Hash key containing Array data and both of the `[]` pair and `&`
+  are required to indicate you are seeking an Anchor by name within an Array
+* Array slicing: `array[start#:stop#]` where `start#` is the first inclusive,
+  zero-based element and `stop#` is the last exclusive element to select;
+  either or both can be negative, causing the elements to be selected from the
+  end of the Array; when `start#` and `stop#` are identical, it is the same as
+  `array[start#]`
+* Hash slicing: `hash[min:max]` where `min` and `max` are alphanumeric terms
+  between which the Hash's keys are compared
+* Escape symbol recognition:  `hash.dotted\.child\.key`,
+  `/hash/whacked\/child\/key`, and `keys_with_\\slashes`
 * Hash attribute searches (which can return zero or more matches):
-  * Exact match:  `hash[name=admin]` or `/hash[name=admin]`
-  * Starts With match:  `hash[name^adm]` or `/hash[name^adm]`
-  * Ends With match:  `hash[name$min]` or `/hash[name$min]`
-  * Contains match:  `hash[name%dmi]` or `/hash[name%dmi]`
-  * Less Than match: `hash[access_level<500]` or `/hash[access_level<500]`
-  * Greater Than match: `hash[access_level>0]` or `/hash[access_level>0]`
-  * Less Than or Equal match: `hash[access_level<=100]` or `/hash[access_level<=100]`
-  * Greater Than or Equal match: `hash[access_level>=0]` or `/hash[access_level>=0]`
-  * Regular Expression matches using any delimiter you choose (other than `/`, if you need something else): `hash[access_level=~/^\D+$/]` or `/hash[access_level=~/^\D+$/]` and `hash[containing=~"/path/values"]` or `/hash[containing=~"/path/values"]`
-  * Invert any match with `!`, like: `hash[name!=admin]` or `/hash[name!=admin]`
-  * Demarcate and/or escape expression values, like: `hash[full\ name="Some User\'s Name"]` or `/hash[full\ name="Some User\'s Name"]`
-  * Multi-level matching: `hash[name%admin].pass[encrypted!^ENC\[]` or `/hash[name%admin]/pass[encrypted!^ENC\[]`
-* Array element searches with all of the search methods above via `.` (yields any matching elements): `array[.>9000]` or `/array[.>9000]`
-* Hash key-name searches with all of the search methods above via `.` (yields their values, not the keys themselves): `hash[.^app_]`
-* Array-of-Hashes Match-All:  Omit a selector for the elements of an Array-of-Hashes and all Hash elements will be yielded (or searched when there is more to the path).  For example, `warriors[1].power_level` or `/warriors[1]/power_level` will return the power_level attribute of only the second Hash in an Array-of-Hashes while `warriors.power_level` or `/warriors/power_level` will return the power_level attribute of every Hash in the same Array-of-Hashes.  Of course these results can be filtered in multiple ways, like `warriors[power_level>9000]`, `/warriors[power_level>9000]`, `warriors.power_level[.>9000]`, and `/warriors/power_level[.>9000]` all yield only warriors with power_levels over 9,000.
-* Complex combinations: `some::deep.hierarchy[with!=""].'any.valid'[.=~/(yaml|json)/][data%structure].or.complexity[4].2` or `/some::deep/hierarchy[with!=""]/any.valid[.=~/(yaml|json)/][data%structure]/or/complexity[4]/2`
+  * Exact match:  `hash[name=admin]`
+  * Starts With match:  `hash[name^adm]`
+  * Ends With match:  `hash[name$min]`
+  * Contains match:  `hash[name%dmi]`
+  * Less Than match: `hash[access_level<500]`
+  * Greater Than match: `hash[access_level>0]`
+  * Less Than or Equal match: `hash[access_level<=100]`
+  * Greater Than or Equal match: `hash[access_level>=0]`
+  * Regular Expression matches: `hash[access_level=~/^\D+$/]` (the `/` Regular
+    Expression delimiter can be substituted for any character you need, except
+    white-space; note that `/` does not interfere with forward-slash notation
+    *and it does not need to be escaped* because the entire search expression is
+    contained within a `[]` pair)
+  * Invert any match with `!`, like: `hash[name!=admin]` or even
+    `hash[!name=admin]` (the former syntax is used when YAML Paths are
+    stringified but both forms are equivalent)
+  * Demarcate and/or escape expression operands, like:
+    `hash[full\ name="Some User\'s Name"]` (note that embedded, single `'` and
+    `"` must be escaped lest they be deemed unmatched demarcation pairings)
+  * Multi-level matching: `hash[name%admin].pass[encrypted!^ENC\[]` or
+    `/hash[name%admin]/pass[encrypted!^ENC\[]`
+* Array element searches with all of the search methods above via `.` (yields
+  any matching elements): `array[.>9000]`
+* Hash key-name searches with all of the search methods above via `.` (yields
+  their values, not the keys themselves): `hash[.^app_]`
+* Array-of-Hashes Pass-Through Selection:  Omit a selector for the elements of
+  an Array-of-Hashes and all matching Hash attributes at that level will be
+  yielded (or searched when there is more to the path).  For example,
+  `warriors[1].power_level` or `/warriors[1]/power_level` will return the
+  power_level attribute of only the second Hash in an Array-of-Hashes while
+  `warriors.power_level` or `/warriors/power_level` will return the power_level
+  attribute of every Hash in the same Array-of-Hashes.  Of course these results
+  can be filtered in multiple ways, like `warriors[power_level>9000]`,
+  `/warriors[power_level>9000]`, `warriors.power_level[.>9000]`, and
+  `/warriors/power_level[.>9000]` all yield only the power_level from *all*
+  warriors with power_levels over 9,000 within the same array of warrior hashes.
+* Collectors:  Placing any portion of the YAML Path within parenthesis defines a
+  virtual list collector, like `(YAML Path)`; concatenation and exclusion
+  operators are supported -- `+` and `-`, respectively -- along with nesting,
+  like `(...)-((...)+(...))`
+* Complex combinations:
+  `some::deep.hierarchy[with!=""].'any.valid'[.=~/(yaml|json)/][data%structure].or.complexity[4].2`
+  or `/some::deep/hierarchy[with!=""]/any.valid[.=~/(yaml|json)/][data%structure]/or/complexity[4]/2`
 
 This implementation of YAML Path encourages creativity.  Use whichever notation
-and forms that make the most sense to you in each application.
+and segment types that make the most sense to you in each application.
 
 ## Installing
 
 This project requires [Python](https://www.python.org/) 3.6.  Most operating
-systems and distributions have access to Python 3 even if only Python 2 came
-pre-installed.  It is generally safe to have more than one version of Python on
-your system at the same time.  Each version of Python uses a unique binary name
-as well as different library and working directories, like `python2.7` versus
-`python3.6`.  Further, each often provides symlinks like `python` (usually for
-Python 2) and `python3`, respectively.
-
-This project runs on all operating systems and distributions where Python 3.6
-and project dependencies are able to run.  While the documentation examples here
-are presented in Linux/OSX shell form, the same commands can be used on Windows
-with minor adjustment.  Cygwin users are also able to enjoy this project.
+systems and distributions have access to Python 3 even if only Python 2 -- or
+no Python, at all -- came pre-installed.  It is generally safe to have more
+than one version of Python on your system at the same time, especially when
+using
+[virtual Python environments](https://docs.python.org/3/library/venv.html).
 
 Each published version of this project can be installed from
 [PyPI](https://pypi.org/) using `pip`.  Note that on systems with more than one
@@ -182,6 +219,22 @@ Cygwin users may need to use `pip3.6`).
 pip3 install yamlpath
 ```
 
+EYAML support is entirely optional.  You do not need EYAML to use YAML Path.
+That YAML Path supports EYAML is a service to a substantial audience:  Puppet
+users.  At the time of this writing, EYAML (classified as a Hiera
+back-end/plug-in) is available only as a Ruby Gem.  That said, it provides a
+command-line tool, `eyaml`, which can be employed by this otherwise Python
+project.  To enjoy EYAML support, install compatible versions of ruby and
+rubygems, then execute:
+
+```shell
+gem install hiera-eyaml
+```
+
+If this puts the `eyaml` command on your system `PATH`, nothing more need be
+done apart from generating or obtaining your encryption keys.  Otherwise, you
+can tell YAML Path library and tools where to find the `eyaml` command.
+
 ## Based on ruamel.yaml and Python 3
 
 In order to support the best available YAML editing capability (so called,
@@ -189,7 +242,9 @@ round-trip editing with support for comment preservation), this project is based
 on [ruamel.yaml](https://bitbucket.org/ruamel/yaml/overview) for
 Python 3.6.  While ruamel.yaml is based on PyYAML --
 Python's "standard" YAML library -- ruamel.yaml is [objectively better than
-PyYAML](https://yaml.readthedocs.io/en/latest/pyyaml.html).
+PyYAML](https://yaml.readthedocs.io/en/latest/pyyaml.html), which lacks critical
+round-trip editing capabilities as well as up-to-date YAML/Compatible data
+parsing capabilities (at the time of this writing).
 
 Should PyYAML ever merge with -- or at least, catch up with -- ruamel.yaml, this
 project can be (lightly) adapted to depend on it, instead.  These conversations
@@ -198,27 +253,6 @@ may offer some insight into when or whether this might happen:
 * [Is this time to pass the baton?](https://github.com/yaml/pyyaml/issues/31)
 * [Rebase off ruamel? - many new valuable features](https://github.com/yaml/pyyaml/issues/46)
 
-### Compatible ruamel.yaml Versions
-
-At the time of this writing, ruamel.yaml is unstable, presently undergoing a
-refactoring and feature creation effort.  As it is a moving target, this project
-is necessarily bound to limited ranges of compatible versions between it and the
-ruamel.yaml project.  Futher, this project comes with fixes to some notable bugs
-in ruamel.yaml.  As such, you should note which specific versions of ruamel.yaml
-that this code is compatible with.  Failing to do so will probably lead to some
-incompatbility.
-
-This list will not be aggressively updated but rather, from time to time as
-in/compatibility reports come in from users of this project.  At present, known
-and tested compatible versions include:
-
-YAML Path Version Range | ruamel.yaml Version Range
-------------------------|--------------------------
-1.0.x - 1.2.x           | >= 0.15.95
-
-You may find other compatible versions outside these ranges.  If you do, please
-drop a note so this table can be updated!
-
 ## The Files of This Project
 
 This repository contains:
@@ -226,17 +260,18 @@ This repository contains:
 1. Generally-useful Python library files.  These contain the reusable core of
    this project's YAML Path capabilities.
 2. Some implementations of those libraries, exhibiting their capabilities and
-   simple-to-use APIs.
+   simple-to-use APIs as command-line tools.
 3. Various support, documentation, and build files.
 
 ### Command-Line Tools
 
-This project provides some command-line tool implementations which utilize
-these YAML Path libraries:
+This project provides some command-line tool implementations which utilize YAML
+Path.  For some use-case examples of these tools,
+[see below](#basic-usage--command-line-tools).
 
-* [eyaml-rotate-keys](bin/eyaml-rotate-keys) -- Rotates the encryption keys used
-  for all EYAML values within a set of YAML files, decrypting with old keys and
-  re-encrypting using replacement keys.
+The supplied command-line tools include:
+
+* [eyaml-rotate-keys](bin/eyaml-rotate-keys)
 
 ```text
 usage: eyaml-rotate-keys [-h] [-V] [-d | -v | -q] [-b] [-x EYAML]
@@ -277,19 +312,17 @@ Any YAML_FILEs lacking EYAML values will not be modified (or backed up, even
 when -b/--backup is specified).
 ```
 
-* [yaml-get](bin/yaml-get) -- Retrieves one or more values from a YAML file at a
-  specified YAML Path.  Output is printed to STDOUT, one line per match.  When
-  a result is a complex data-type (Array or Hash), a Python-compatible dump is
-  produced to represent the entire complex result.  EYAML can be employed to
-  decrypt the values.
+* [yaml-get](bin/yaml-get)
 
 ```text
 usage: yaml-get [-h] [-V] -p YAML_PATH [-t {auto,dot,fslash}] [-x EYAML]
                 [-r PRIVATEKEY] [-u PUBLICKEY] [-d | -v | -q]
                 YAML_FILE
 
-Gets one or more values from a YAML file at a specified YAML Path. Can employ
-EYAML to decrypt values.
+Retrieves one or more values from a YAML file at a specified YAML Path. Output
+is printed to STDOUT, one line per result. When a result is a complex data-
+type (Array or Hash), a JSON dump is produced to represent it. EYAML can be
+employed to decrypt the values.
 
 positional arguments:
   YAML_FILE             the YAML file to query
@@ -323,12 +356,7 @@ For more information about YAML Paths, please visit
 https://github.com/wwkimball/yamlpath.
 ```
 
-* [yaml-set](bin/yaml-set) -- Changes one or more values in a YAML file at a
-  specified YAML Path.  Matched values can be checked before they are replaced
-  to mitigate accidental change. When matching singular results, the value can
-  be archived to another key before it is replaced.  Further, EYAML can be
-  employed to encrypt the new values and/or decrypt old values before checking
-  them.
+* [yaml-set](bin/yaml-set)
 
 ```text
 usage: yaml-set [-h] [-V] -g YAML_PATH [-a VALUE | -f FILE | -i | -R LENGTH]
@@ -354,7 +382,8 @@ optional arguments:
   -c CHECK, --check CHECK
                         check the value before replacing it
   -s YAML_PATH, --saveto YAML_PATH
-                        save the old value to YAML_PATH before replacing it
+                        save the old value to YAML_PATH before replacing it;
+                        implies --mustexist
   -m, --mustexist       require that the --change YAML_PATH already exist in
                         YAML_FILE
   -b, --backup          save a backup YAML_FILE with an extra .bak file-
@@ -400,20 +429,19 @@ https://github.com/wwkimball/yamlpath.
 
 ### Libraries
 
-While there are several supporting library files like enumerations and
+While there are several supporting library files like enumerations, types, and
 exceptions, the most interesting library files include:
 
-* [parser.py](yamlpath/parser.py) -- The core YAML Path parser logic.
-* [yamlpath.py](yamlpath/yamlpath.py) -- A collection of generally-useful YAML
-  methods that enable easily setting and retrieving values via YAML Paths.
-* [eyamlpath.py](yamlpath/eyaml/eyamlpath.py) -- Extends the YAMLPath class to
-  support EYAML data encryption and decryption.
+* [yamlpath.py](yamlpath/yamlpath.py) -- The core YAML Path parser logic.
+* [processor.py](yamlpath/processor.py) -- Processes YAMLPath instances to read
+  or write data to YAML/Compatible sources.
+* [eyamlprocessor.py](yamlpath/eyaml/eyamlprocessor.py) -- Extends the
+  Processor class to support EYAML data encryption and decryption.
 
 ## Basic Usage
 
-The files of this project can be used either as command-line tools -- to take
-advantage of the existing example implementations -- or as libraries to
-supplement your own implementations.
+The files of this project can be used either as command-line tools or as
+libraries to supplement your own work.
 
 ### Basic Usage:  Command-Line Tools
 
@@ -437,7 +465,7 @@ eyaml-rotate-keys \
 ```
 
 You could combine this with `find` and `xargs` if your E/YAML file are
-dispersed through a directory hierarchy.
+dispersed through a directory hierarchy, as with Hiera data.
 
 #### Get a YAML Value
 
@@ -465,6 +493,7 @@ apply the new password to your application(s):
 
 ```shell
 yaml-set \
+  --mustexist \
   --change=the.new.password \
   --saveto=the.old.password \
   --value="New Password" \
@@ -472,9 +501,7 @@ yaml-set \
 ```
 
 For the extremely cautious, you could check the old password before rotating
-it, save a backup of the original file, and mandate that the password path
-already exist within the data before replacing it (otherwise `yaml-set` will
-create the key, if missing):
+it and save a backup of the original file:
 
 ```shell
 yaml-set \
@@ -541,23 +568,24 @@ credit to the source).  That said, here's a general flow/synopsis.
 #### Initialize ruamel.yaml and These Helpers
 
 Your preferences may differ, but I use this setup for round-trip YAML parsing
-and editing with ruamel.yaml.  I also use `EYAMLPath` in virtually all cases
-rather than `YAMLPath`, but you can do the opposite if you are absolutely
-certain that your data will never be EYAML encrypted.
+and editing with ruamel.yaml.  When you need to process EYAML encrypted data,
+replace `yamlpath.Processor` with `yamlpath.eyaml.EYAMLProcessor` and add error
+handling for `yamlpath.eyaml.EYAMLCommandException`.
 
-Note that `import yamlpath.patches` is entirely optional; I wrote and use it to
+Note that `import yamlpath.patches` is entirely optional.  I wrote and use it to
 block ruamel.yaml's Emitter from injecting unnecessary newlines into folded
 values (it improperly converts every single new-line into two for left-flushed
-multi-line values, at the time of this writing).  Since block output EYAML
+multi-line values, at the time of this writing).  Since "block" output EYAML
 values are left-flushed multi-line folded strings, this fix is necessary when
-using EYAML features.
+using EYAML features.  At least, until ruamel.yaml has its own fix for this
+issue.
 
 Note also that these examples use `ConsolePrinter` to handle STDOUT and STDERR
 messaging.  You don't have to.  However, some kind of logger must be passed to
 these libraries so they can write messages _somewhere_.  Your custom message
-handler or logger must provide the same API as ConsolePrinter; review the header
-documentation in [consoleprinter.py](yamlpath/wrappers/consoleprinter.py) for
-details.  Generally speaking, it would be trivial to write your own custom
+handler or logger must provide the same API as `ConsolePrinter`; review the
+header documentation in [consoleprinter.py](yamlpath/wrappers/consoleprinter.py)
+for details.  Generally speaking, it would be trivial to write your own custom
 wrapper for Python's standard logging facilities if you require targets other
 than STDOUT and STDERR.
 
@@ -567,20 +595,15 @@ import sys
 from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
 
-from yamlpath.exceptions import YAMLPathException
-from yamlpath.eyaml import EYAMLPath
-from yamlpath.enums import YAMLValueFormats
-
 import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
+from yamlpath import Processor
 
-# Process command-line arguments, initialize the output writer and the YAMLPath
-# processor.
+# Process command-line arguments and initialize the output writer
 args = processcli()
 log = ConsolePrinter(args)
-processor = EYAMLPath(log)
 
-# Prep the YAML parser
+# Prep the YAML parser and round-trip editor (tweak to your needs)
 yaml = YAML()
 yaml.indent(mapping=2, sequence=4, offset=2)
 yaml.explicit_start = True
@@ -593,45 +616,53 @@ try:
     with open(args.yaml_file, 'r') as f:
         yaml_data = yaml.load(f)
 except ParserError as e:
-    log.error("YAML parsing error {}:  {}".format(str(e.problem_mark).lstrip(), e.problem))
+    log.error("YAML parsing error {}:  {}"
+        .format(str(e.problem_mark).lstrip(), e.problem))
+
+# Pass the log writer and parsed YAML data to the YAMLPath processor
+processor = Processor(log, yaml_data)
+
+# At this point, the processor is ready to handle YAMLPaths
 ```
 
 #### Searching for YAML Nodes
 
 These libraries use [Generators](https://wiki.python.org/moin/Generators) to get
-nodes from parsed YAML data.  Identify which node(s) to get via
-[YAML Path](#yaml-path) strings.  You should also catch `YAMLPathException`s
+nodes from parsed YAML data.  Identify which node(s) to get via YAML Path
+strings.  You should also catch `yamlpath.exceptions.YAMLPathException`s
 unless you prefer Python's native stack traces.  When using EYAML, you should
-also catch `EYAMLCommandException`s for the same reason.  Whether you are
-working with a single result or many, you must consume the Generator output with
-a pattern similar to:
+also catch `yamlpath.eyaml.exceptions.EYAMLCommandException`s for the same
+reason.  Whether you are working with a single result or many, you should
+consume the Generator output with a pattern similar to:
 
 ```python
-yaml_path = "see.documentation.above.for.many.samples"
-try:
-    for node in yh.get_eyaml_values(yaml_data, yaml_path):
-        log.debug("Got {} from {}.".format(node, yaml_path))
+from yamlpath import YAMLPath
+from yamlpath.exceptions import YAMLPathException
 
+yaml_path = YAMLPath("see.documentation.above.for.many.samples")
+try:
+    for node in processor.get_nodes(yaml_path):
+        log.debug("Got {} from '{}'.".format(node, yaml_path))
         # Do something with each node...
 except YAMLPathException as ex:
     # If merely retrieving data, this exception may be deemed non-critical
     # unless your later code absolutely depends upon a result.
     log.error(ex)
-except EYAMLCommandException as ex:
-    log.critical(ex, 120)
 ```
 
 #### Changing Values
 
-At its simplest, you only need to supply the pre-parsed YAML data, the YAML
-Path to one or more nodes to update, and the value to apply to them.  Catching
-`YAMLPathException` is optional but usually preferred over allowing Python to
-dump the call stack in front of your users.  When using EYAML, the same applies
-to `EYAMLCommandException`.
+At its simplest, you only need to supply the the YAML Path to one or more nodes
+to update, and the value to apply to them.  Catching
+`yamlpath.exceptions.YAMLPathException` is optional but usually preferred over
+allowing Python to dump the call stack in front of your users.  When using
+EYAML, the same applies to `yamlpath.eyaml.exceptions.EYAMLCommandException`.
 
 ```python
+from yamlpath.exceptions import YAMLPathException
+
 try:
-    yh.set_value(yaml_data, yaml_path, new_value)
+    processor.set_value(yaml_path, new_value)
 except YAMLPathException as ex:
     log.critical(ex, 119)
 except EYAMLCommandException as ex:

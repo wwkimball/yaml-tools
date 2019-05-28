@@ -1,832 +1,612 @@
-"""YAML Path implementation based on ruamel.yaml.
-
-Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
-from sys import maxsize
-import re
-from distutils.util import strtobool
+Implements YAML Path.
 
-from ruamel.yaml.comments import CommentedSeq, CommentedMap
-from ruamel.yaml.scalarstring import (
-    PlainScalarString,
-    DoubleQuotedScalarString,
-    SingleQuotedScalarString,
-    FoldedScalarString,
-    LiteralScalarString,
-)
-from ruamel.yaml.scalarbool import ScalarBoolean
-from ruamel.yaml.scalarfloat import ScalarFloat
-from ruamel.yaml.scalarint import ScalarInt
+Copyright 2019 William W. Kimball, Jr. MBA MSIS
+"""
+from collections import deque
+from typing import Deque, List, Optional, Union
 
-from yamlpath.exceptions import YAMLPathException
 from yamlpath.enums import (
-    YAMLValueFormats,
     PathSegmentTypes,
     PathSearchMethods,
+    PathSeperators,
+    CollectorOperators,
 )
-from yamlpath.parser import Parser
+from yamlpath.path import SearchTerms, CollectorTerms
+from yamlpath.types import PathSegment
 
 
 class YAMLPath:
-    """Query and update YAML data via robust YAML Paths."""
+    """
+    Encapsulate a YAML Path and its parsing logic.
 
-    def __init__(self, logger, **kwargs):
-        """Init this class.
+    This will keep track of:
+      * the original, unparsed, and unmodified YAML Path;
+      * its segment seperator (inferred or manually specified);
+      * the unescaped, parsed representation of the YAML Path; and
+      * the escaped, parsed representation of the YAML Path.
 
-        Positional Parameters:
-          1. logger (ConsoleWriter) Instance of ConsoleWriter or any similar
-             wrapper (say, around stdlib logging modules)
+    Parsing operations are lazy and property setting smartly tiggers re-parsing
+    only when necessary.
+
+    Parameters:
+        1. yaml_path (Union["YAMLPath", str]) The YAML Path to parse or copy
+        2. pathsep (PathSeperators) Forced YAML Path segment seperator; set
+            only when automatic inference fails
+
+    Returns:  N/A
+
+    Raises:  N/A
+    """
+
+    def __init__(self, yaml_path: Union["YAMLPath", str] = "",
+                 pathsep: PathSeperators = PathSeperators.AUTO) -> None:
+        self._seperator: PathSeperators = pathsep
+        self._original: str = ""
+        self._unescaped: deque = deque()
+        self._escaped: deque = deque()
+        self._stringified: str = ""
+
+        if isinstance(yaml_path, YAMLPath):
+            self.original = yaml_path.original
+        else:
+            self.original = yaml_path
+
+    def __str__(self) -> str:
+        if self._stringified:
+            return self._stringified
+
+        segments = self.unescaped
+        pathsep: str = str(self.seperator)
+        add_sep: bool = False
+        ppath: str = ""
+
+        # FSLASH seperator requires a path starting with a /
+        if self.seperator is PathSeperators.FSLASH:
+            ppath = "/"
+
+        for (segment_type, segment_attrs) in segments:
+            if segment_type == PathSegmentTypes.KEY:
+                if add_sep:
+                    ppath += pathsep
+
+                ppath += (
+                    str(segment_attrs)
+                    .replace(pathsep, "\\{}".format(pathsep))
+                    .replace("&", r"\&")
+                    .replace("[", r"\[")
+                    .replace("]", r"\]")
+                )
+            elif segment_type == PathSegmentTypes.INDEX:
+                ppath += "[{}]".format(segment_attrs)
+            elif segment_type == PathSegmentTypes.ANCHOR:
+                if add_sep:
+                    ppath += "[&{}]".format(segment_attrs)
+                else:
+                    ppath += "&{}".format(segment_attrs)
+            elif segment_type == PathSegmentTypes.SEARCH:
+                ppath += str(segment_attrs)
+            elif segment_type == PathSegmentTypes.COLLECTOR:
+                ppath += str(segment_attrs)
+
+            add_sep = True
+
+        self._stringified = ppath
+        return ppath
+
+    def __repr__(self) -> str:
+        """Generates an eval()-safe representation of this object."""
+        return ("{}('{}', '{}')".format(self.__class__.__name__,
+                                        self.original, self.seperator))
+
+    @property
+    def original(self) -> str:
+        """
+        Original YAML Path accessor.
+
+        Positional Parameters:  N/A
+
+        Returns:  (str) The original, unparsed, unmodified YAML Path
+
+        Raises:  N/A
+        """
+        return self._original
+
+    @original.setter
+    def original(self, value: str) -> None:
+        """
+        Original YAML Path mutator.
+
+        Parameters:
+            1. value (str) A YAML Path in string form
 
         Returns:  N/A
 
         Raises:  N/A
         """
-        self.log = logger
+        # Check for empty paths
+        if not str(value).strip():
+            value = ""
 
-        if "parser" in kwargs:
-            self.parser = kwargs.pop("parser")
-        else:
-            self.parser = Parser(logger, **kwargs)
+        self._original = value
+        self._seperator = PathSeperators.AUTO
+        self._unescaped = deque()
+        self._escaped = deque()
+        self._stringified = ""
 
-    def get_nodes(self, data, yaml_path, **kwargs):
-        """Retrieves zero or more node at YAML Path in YAML data.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. yaml_path (any) The YAML Path to evaluate
-
-        Optional Parameters:
-          1. mustexist (Boolean) Indicate whether yaml_path must exist
-             in data prior to this query (lest an Exception be raised);
-             default=False
-          2. default_value (any) The value to set at yaml_path should
-             it not already exist in data and mustexist is False;
-             default=None
-
-        Returns:  (object) The requested YAML nodes as they are matched or None
-          when data or yaml_path are None.
-
-        Raises:
-            YAMLPathException when YAML Path is invalid
+    @property
+    def seperator(self) -> PathSeperators:
         """
-        mustexist = kwargs.pop("mustexist", False)
-        default_value = kwargs.pop("default_value", None)
+        Accessor for the seperator used to demarcate YAML Path segments.
 
-        if data is None or yaml_path is None:
-            return
+        Parameters:  N/A
 
-        path = self.parser.parse_path(yaml_path)
-        if mustexist:
-            matched_nodes = 0
-            for node in self._get_nodes(data, path):
-                if node is not None:
-                    matched_nodes += 1
-                    self.log.debug(
-                        "YAMLPath::get_nodes:  Relaying required node:"
-                    )
-                    yield node
-
-            if matched_nodes < 1:
-                raise YAMLPathException(
-                    "Required YAML Path does not match any nodes",
-                    self.parser.str_path(yaml_path)
-                )
-        else:
-            for node in self._ensure_path(data, path, default_value):
-                if node is not None:
-                    self.log.debug(
-                        "YAMLPath::get_nodes:  Relaying optional node:"
-                    )
-                    yield node
-
-    def set_value(self, data, yaml_path, value, **kwargs):
-        """Sets the value of zero or more nodes at YAML Path in YAML data.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. yaml_path (any) The YAML Path to evaluate
-          3. value (any) The value to set
-
-        Optional Parameters:
-          1. mustexist (Boolean) Indicate whether yaml_path must exist
-             in data prior to this query (lest an Exception be raised);
-             default=False
-          2. value_format (YAMLValueFormats) The demarcation or visual
-             representation to use when writing the data;
-             default=YAMLValueFormats.DEFAULT
-
-        Returns:  N/A
-
-        Raises:
-            YAMLPathException when YAML Path is invalid
-        """
-        if data is None or yaml_path is None:
-            return
-
-        mustexist = kwargs.pop("mustexist", False)
-        value_format = kwargs.pop("value_format", YAMLValueFormats.DEFAULT)
-        path = self.parser.parse_path(yaml_path)
-        if mustexist:
-            self.log.debug(
-                "YAMLPath::set_value:  Seeking required node at {}."
-                .format(self.parser.str_path(path))
-            )
-            found_nodes = 0
-            for node in self._get_nodes(data, path):
-                if node is not None:
-                    found_nodes += 1
-                    self.update_node(data, node, value, value_format)
-
-            if found_nodes < 1:
-                raise YAMLPathException(
-                    "No nodes matched required YAML Path",
-                    self.parser.str_path(path)
-                )
-        else:
-            self.log.debug(
-                "YAMLPath::set_value:  Seeking optional node at {}."
-                .format(self.parser.str_path(path))
-            )
-            for node in self._ensure_path(data, path, value):
-                if node is not None:
-                    self.update_node(data, node, value, value_format)
-
-    def _get_nodes(self, data, yaml_path):
-        """Generates zero or more matching, pre-existing nodes from YAML data
-        matching a YAML Path.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. yaml_path (deque) The pre-parsed YAML Path to follow
-
-        Returns:  (object) The requested YAML nodes as they are matched or None
+        Returns:  (PathSeperators) The segment demarcation symbol
 
         Raises:  N/A
         """
-        if data is None or yaml_path is None:
-            return
+        if self._seperator is PathSeperators.AUTO:
+            self._seperator = PathSeperators.infer_seperator(self._original)
 
-        matches = 0
-        if yaml_path:
-            (curtyp, curele) = curref = yaml_path.popleft()
-            unstripped_ele = curele[2]
+        return self._seperator
 
-            self.log.debug(
-                ("YAMLPath::_get_nodes:  Seeking element <{}>{} in data of"
-                 + " type {}:"
-                ).format(curtyp, unstripped_ele, type(data))
-            )
-            self.log.debug(data)
-            self.log.debug("")
+    @seperator.setter
+    def seperator(self, value: PathSeperators) -> None:
+        """
+        Mutator for the seperator used to demarcate YAML Path segments.  This
+        only affects __str__ and only when the new value differs from the
+        seperator already inferred from the original YAML Path.
 
-            # The next element must already exist
-            for node in self._get_elements_by_ref(data, curref):
-                if node is not None:
-                    matches += 1
-                    self.log.debug(
-                        ("YAMLPath::_get_nodes:  Found element <{}>{} in the"
-                         + " data and recursing into it...")
-                        .format(curtyp, unstripped_ele)
-                    )
-                    for epn in self._get_nodes(node, yaml_path.copy()):
-                        if epn is not None:
-                            yield epn
+        Parameters:
+            1. value (PathSeperators) The segment demarcation symbol
 
-            if not matches:
-                return
+        Returns:  N/A
 
-        if not matches:
-            self.log.debug(
-                "YAMLPath::_get_nodes:  Finally returning data of type {}:"
-                .format(type(data))
-            )
-            self.log.debug(data)
-            self.log.debug("")
+        Raises:  N/A
+        """
+        old_value: PathSeperators = self._seperator
 
-            yield data
+        # This changes only the stringified representation
+        if not value == old_value:
+            self._seperator = value
+            self._stringified = ""
+            self._stringified = str(self)
 
-    def _get_elements_by_ref(self, data, ref):
-        """Returns zero or more referenced YALM Nodes or None when the given
-        reference points nowhere.
+    @property
+    def escaped(self) -> Deque[PathSegment]:
+        r"""
+        Accessor for the escaped, parsed version of this YAML Path.
 
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. ref (tuple(PathSegmentTypes,(str,any,any))) A YAML Path segment
-             reference
+        Any leading \ symbols are stripped out.  This is the parsed YAML Path
+        used for processing YAML data.
 
-        Returns:  (object) At least one YAML Node or None
+        Parameters:  N/A
+
+        Returns:  (deque) The escaped, parsed version of this YAML Path
+
+        Raises:  N/A
+        """
+        if not self._escaped:
+            self._escaped = self._parse_path(True)
+
+        return self._escaped.copy()
+
+    @property
+    def unescaped(self) -> Deque[PathSegment]:
+        r"""
+        Accessor for the unescaped, parsed version of this YAML Path.  Any
+        leading \ symbols are preserved.  This is the print and log friendly
+        version of the parsed YAML Path.
+
+        Parameters:  N/A
+
+        Returns:  (deque) The unescaped, parsed version of this YAML Path
+
+        Raises:  N/A
+        """
+        if not self._unescaped:
+            self._unescaped = self._parse_path(False)
+
+        return self._unescaped.copy()
+
+    # pylint: disable=locally-disabled,too-many-locals,too-many-branches,too-many-statements
+    def _parse_path(self,
+                    strip_escapes: bool = True
+                   ) -> Deque[PathSegment]:
+        r"""
+        Breaks apart a stringified YAML Path into component segments, each
+        identified by its type.  See README.md for sample YAML Paths.
+
+        Parameters:
+            1. strip_escapes (bool) True = Remove leading \ symbols, leaving
+               only the "escaped" symbol.  False = Leave all leading \ symbols
+               intact.
+
+        Returns:  (deque) an empty queue or a queue of tuples, each identifying
+          (PathSegmentTypes, segment_attributes).
 
         Raises:
-          NotImplementedError when ref indicates an unknown
-          PathSegmentTypes value.
+            - `YAMLPathException` when the YAML Path is invalid
         """
-        if data is None or ref is None:
-            return
+        from yamlpath.exceptions import YAMLPathException
 
-        reftyp = ref[0]
-        refori = ref[1][0]
-        refesc = ref[1][1]
-        refune = ref[1][2]
-        if reftyp == PathSegmentTypes.KEY:
-            if isinstance(data, dict) and refesc in data:
-                yield data[refesc]
-            elif isinstance(data, list):
-                try:
-                    # Try using the ref as a bare Array index
-                    intele = int(refesc)
-                    if len(data) > intele:
-                        yield data[intele]
-                except ValueError:
-                    # Pass-through search against possible Array-of-Hashes
-                    for rec in data:
-                        for node in self._get_elements_by_ref(rec, ref):
-                            if node is not None:
-                                yield node
-        elif (
-            reftyp == PathSegmentTypes.INDEX
-            and isinstance(refesc, str)
-            and ':' in refesc
-        ):
-            # Array index or Hash key slice
-            refparts = refesc.split(':', 1)
-            min_match = refparts[0]
-            max_match = refparts[1]
-            if isinstance(data, list):
-                try:
-                    intmin = int(min_match)
-                    intmax = int(max_match)
-                except ValueError:
-                    raise YAMLPathException(
-                        "{} is not an integer array slice".format(str(refesc))
-                        , refori
-                        , refune
-                    )
+        yaml_path: str = self.original
+        path_segments: deque = deque()
+        segment_id: str = ""
+        segment_type: Optional[PathSegmentTypes] = None
+        demarc_stack: List[str] = []
+        escape_next: bool = False
+        search_inverted: bool = False
+        search_method: Optional[PathSearchMethods] = None
+        search_attr: str = ""
+        seeking_regex_delim: bool = False
+        capturing_regex: bool = False
+        pathsep: str = str(self.seperator)
+        collector_level: int = 0
+        collector_operator: CollectorOperators = CollectorOperators.NONE
+        seeking_collector_operator: bool = False
 
-                if intmin == intmax and len(data) > intmin:
-                    yield data[intmin]
+        # Empty paths yield empty queues
+        if not yaml_path:
+            return path_segments
+
+        # Infer the first possible position for a top-level Anchor mark
+        first_anchor_pos = 0
+        if self.seperator is PathSeperators.FSLASH:
+            first_anchor_pos = 1
+        seeking_anchor_mark = yaml_path[first_anchor_pos] == "&"
+
+        # Parse the YAML Path
+        # pylint: disable=locally-disabled,too-many-nested-blocks
+        for char in yaml_path:
+            demarc_count = len(demarc_stack)
+
+            if escape_next:
+                # Pass-through; capture this escaped character
+                escape_next = False
+
+            elif capturing_regex:
+                if char == demarc_stack[-1]:
+                    # Stop the RegEx capture
+                    capturing_regex = False
+                    demarc_stack.pop()
+                    continue
                 else:
-                    yield data[intmin:intmax]
+                    # Pass-through; capture everything that isn't the present
+                    # RegEx delimiter.  This deliberately means users cannot
+                    # escape the RegEx delimiter itself should it occur within
+                    # the RegEx; thus, users must select a delimiter that won't
+                    # appear within the RegEx (which is exactly why the user
+                    # gets to choose the delimiter).
+                    pass  # pragma: no cover
 
-            elif isinstance(data, dict):
-                for key, val in data.items():
-                    if key >= min_match and key <= max_match:
-                        yield val
-        elif reftyp == PathSegmentTypes.INDEX:
-            try:
-                intele = int(refesc)
-            except ValueError:
-                raise YAMLPathException(
-                    "{} is not an integer array index".format(str(refesc))
-                    , refori
-                    , refune
-                )
+            # The escape test MUST come AFTER the RegEx capture test so users
+            # won't be forced into "The Backslash Plague".
+            # (https://docs.python.org/3/howto/regex.html#the-backslash-plague)
+            elif char == "\\":
+                # Escape the next character
+                escape_next = True
+                if strip_escapes:
+                    continue
 
-            if isinstance(data, list) and len(data) > intele:
-                yield data[intele]
-        elif reftyp == PathSegmentTypes.ANCHOR:
-            if isinstance(data, list):
-                for ele in data:
-                    if hasattr(ele, "anchor") and refesc == ele.anchor.value:
-                        yield ele
-            elif isinstance(data, dict):
-                for _, val in data.items():
-                    if hasattr(val, "anchor") and refesc == val.anchor.value:
-                        yield val
-        elif reftyp == PathSegmentTypes.SEARCH:
-            for match in self._search(data, refesc):
-                if match is not None:
-                    yield match
-        else:
-            raise NotImplementedError
-
-    def _search(self, data, terms):
-        """Searches the top level of given YAML data for all matching dictionary
-        entries.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. terms (list) A list with these elements:
-             0 = invert result (Boolean) true = Return a NON-matching node
-             1 = search method (PathSearchMethods) the search
-                 method
-             2 = attribute name (str) the dictionary key to the value to check
-             3 = search phrase (any) the value to match
-        """
-
-        def search_matches(method, needle, haystack):
-            self.log.debug(
-                ("YAMLPath::_search::search_matches:  Searching for {}{}"
-                 + " using {} against {}:"
-                ).format(type(needle), needle, method, type(haystack))
-            )
-            self.log.debug(haystack)
-            matches = None
-
-            if method is PathSearchMethods.EQUALS:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack == int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack == float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack == needle
-            elif method is PathSearchMethods.STARTS_WITH:
-                matches = str(haystack).startswith(needle)
-            elif method is PathSearchMethods.ENDS_WITH:
-                matches = str(haystack).endswith(needle)
-            elif method is PathSearchMethods.CONTAINS:
-                matches = needle in str(haystack)
-            elif method is PathSearchMethods.GREATER_THAN:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack > int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack > float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack > needle
-            elif method is PathSearchMethods.LESS_THAN:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack < int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack < float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack < needle
-            elif method is PathSearchMethods.GREATER_THAN_OR_EQUAL:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack >= int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack >= float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack >= needle
-            elif method is PathSearchMethods.LESS_THAN_OR_EQUAL:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack <= int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack <= float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack <= needle
-            elif method == PathSearchMethods.REGEX:
-                matcher = re.compile(needle)
-                matches = matcher.search(str(haystack)) is not None
-            else:
-                raise NotImplementedError
-
-            return matches
-
-        invert, method, attr, term = terms
-        if isinstance(data, list):
-            for ele in data:
-                if attr == '.':
-                    matches = search_matches(method, term, ele)
-                elif isinstance(ele, dict) and attr in ele:
-                    matches = search_matches(method, term, ele[attr])
-
-                if (matches and not invert) or (invert and not matches):
-                    yield ele
-
-        elif isinstance(data, dict):
-            # Allow . to mean "each key's name"
-            if attr == '.':
-                for key, val in data.items():
-                    matches = search_matches(method, term, key)
-                    if (matches and not invert) or (invert and not matches):
-                        yield val
-
-            elif attr in data:
-                value = data[attr]
-                matches = search_matches(method, term, value)
-                if (matches and not invert) or (invert and not matches):
-                    yield value
-
-        else:
-            # Check the passed data itself for a match
-            matches = search_matches(method, term, data)
-            if (matches and not invert) or (invert and not matches):
-                yield data
-
-    def _ensure_path(self, data, path, value=None):
-        """Returns zero or more pre-existing nodes matching a YAML Path, or
-        exactly one new node at the end of the YAML Path if it had to be
-        created.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. path (deque) The pre-parsed YAML Path to follow
-          3. value (any) The value to assign to the element
-
-        Returns:  (object) The specified node(s)
-
-        Raises:
-          YAMLPathException when the YAML Path is invalid.
-          NotImplementedError when a segment of the YAML Path indicates
-            an element that does not exist in data and this code isn't
-            yet prepared to add it.
-        """
-        if data is None or path is None:
-            self.log.debug(
-                "YAMLPath::_ensure_path:  Bailing out on None data/path!"
-            )
-            return
-
-        if path:
-            (curtyp, curele) = curref = path.popleft()
-            original_path = curele[0]
-            stripped_ele = curele[1]
-            unstripped_ele = curele[2]
-
-            self.log.debug(
-                ("YAMLPath::_ensure_path:  Seeking element <{}>{} in data of"
-                 + " type {}:"
-                ).format(curtyp, unstripped_ele, type(data))
-            )
-            self.log.debug(data)
-            self.log.debug("")
-
-            # The next element may not exist; this method ensures that it does
-            matched_nodes = 0
-            for node in self._get_elements_by_ref(data, curref):
-                if node is not None:
-                    matched_nodes += 1
-                    self.log.debug(
-                        ("YAMLPath::_ensure_path:  Found element <{}>{} in the"
-                            + " data; recursing into it..."
-                        ).format(curtyp, unstripped_ele)
-                    )
-                    for epn in self._ensure_path(node, path.copy(), value):
-                        if epn is not None:
-                            yield epn
-
-            if (
-                matched_nodes < 1
-                and curtyp is not PathSegmentTypes.SEARCH
+            elif (
+                    char == " "
+                    and (demarc_count < 1
+                         or demarc_stack[-1] not in ["'", '"'])
             ):
-                # Add the missing element
-                self.log.debug(
-                    ("YAMLPath::_ensure_path:  Element <{}>{} is unknown in"
-                     + " the data!"
-                    ).format(curtyp, unstripped_ele)
-                )
-                if isinstance(data, list):
-                    self.log.debug(
-                        "YAMLPath::_ensure_path:  Dealing with a list"
-                    )
-                    if curtyp is PathSegmentTypes.ANCHOR:
-                        new_val = self.default_for_child(path, value)
-                        new_ele = self.append_list_element(
-                            data, new_val, stripped_ele
-                        )
-                        for node in self._ensure_path(new_ele, path, value):
-                            if node is not None:
-                                matched_nodes += 1
-                                yield node
-                    elif (
-                        curtyp is PathSegmentTypes.INDEX
-                        and isinstance(stripped_ele, int)
-                    ):
-                        for _ in range(len(data) - 1, stripped_ele):
-                            new_val = self.default_for_child(path, value)
-                            self.append_list_element(data, new_val)
-                        for node in self._ensure_path(
-                            data[stripped_ele], path, value
-                        ):
-                            if node is not None:
-                                matched_nodes += 1
-                                yield node
-                    else:
-                        raise YAMLPathException(
-                            "Cannot add {} subreference to lists"
-                            .format(str(curtyp))
-                            , original_path
-                            , unstripped_ele
-                        )
-                elif isinstance(data, dict):
-                    self.log.debug(
-                        "YAMLPath::_ensure_path:  Dealing with a dictionary"
-                    )
-                    if curtyp is PathSegmentTypes.ANCHOR:
-                        raise NotImplementedError
+                # Ignore unescaped, non-demarcated whitespace
+                continue
 
-                    if curtyp is PathSegmentTypes.KEY:
-                        data[stripped_ele] = self.default_for_child(
-                            path, value
-                        )
-                        for node in self._ensure_path(
-                            data[stripped_ele], path, value
-                        ):
-                            if node is not None:
-                                matched_nodes += 1
-                                yield node
+            elif seeking_regex_delim:
+                # This first non-space symbol is now the RegEx delimiter
+                seeking_regex_delim = False
+                capturing_regex = True
+                demarc_stack.append(char)
+                demarc_count += 1
+                continue
+
+            elif seeking_anchor_mark and char == "&":
+                # Found an expected (permissible) ANCHOR mark
+                seeking_anchor_mark = False
+                segment_type = PathSegmentTypes.ANCHOR
+                continue
+
+            elif seeking_collector_operator and char in ['+', '-']:
+                seeking_collector_operator = False
+                if char == '+':
+                    collector_operator = CollectorOperators.ADDITION
+                elif char == '-':
+                    collector_operator = CollectorOperators.SUBTRACTION
+                continue
+
+            elif char in ['"', "'"]:
+                # Found a string demarcation mark
+                if demarc_count > 0:
+                    # Already appending to an ongoing demarcated value
+                    if char == demarc_stack[-1]:
+                        # Close a matching pair
+                        demarc_stack.pop()
+                        demarc_count -= 1
+
+                        # Record the element_id when all pairs have closed
+                        # unless there is no element_id.
+                        if demarc_count < 1:
+                            if segment_id:
+                                # Unless the element has already been
+                                # identified as a special type, assume it is a
+                                # KEY.
+                                if segment_type is None:
+                                    segment_type = PathSegmentTypes.KEY
+                                path_segments.append(
+                                    (segment_type, segment_id))
+
+                            segment_id = ""
+                            segment_type = None
+                            continue
                     else:
-                        raise YAMLPathException(
-                            "Cannot add {} subreference to dictionaries"
-                            .format(str(curtyp)),
-                            original_path,
-                            unstripped_ele
-                        )
+                        # Embed a nested, demarcated component
+                        demarc_stack.append(char)
+                        demarc_count += 1
                 else:
+                    # Fresh demarcated value
+                    demarc_stack.append(char)
+                    demarc_count += 1
+                    continue
+
+            elif char == "(":
+                seeking_collector_operator = False
+                collector_level += 1
+                demarc_stack.append(char)
+                demarc_count += 1
+                segment_type = PathSegmentTypes.COLLECTOR
+
+                # Preserve nested collectors
+                if collector_level == 1:
+                    continue
+
+            elif collector_level > 0:
+                if (
+                        demarc_count > 0
+                        and char == ")"
+                        and demarc_stack[-1] == "("
+                ):
+                    collector_level -= 1
+                    demarc_count -= 1
+                    demarc_stack.pop()
+
+                    if collector_level < 1:
+                        path_segments.append(
+                            (segment_type,
+                             CollectorTerms(segment_id, collector_operator)))
+                        segment_id = ""
+                        collector_operator = CollectorOperators.NONE
+                        seeking_collector_operator = True
+                        continue
+
+            elif demarc_count == 0 and char == "[":
+                # Array INDEX/SLICE or SEARCH
+                if segment_id:
+                    # Record its predecessor element; unless it has already
+                    # been identified as a special type, assume it is a KEY.
+                    if segment_type is None:
+                        segment_type = PathSegmentTypes.KEY
+                    path_segments.append((segment_type, segment_id))
+                    segment_id = ""
+
+                demarc_stack.append(char)
+                demarc_count += 1
+                segment_type = PathSegmentTypes.INDEX
+                seeking_anchor_mark = True
+                search_inverted = False
+                search_method = None
+                search_attr = ""
+                continue
+
+            elif (
+                    demarc_count > 0
+                    and demarc_stack[-1] == "["
+                    and char in ["=", "^", "$", "%", "!", ">", "<", "~"]
+            ):
+                # Hash attribute search
+                if char == "!":
+                    if search_inverted:
+                        raise YAMLPathException(
+                            "Double search inversion is meaningless at {}"
+                            .format(char)
+                            , yaml_path
+                        )
+
+                    # Invert the search
+                    search_inverted = True
+                    continue
+
+                elif char == "=":
+                    # Exact value match OR >=|<=
+                    segment_type = PathSegmentTypes.SEARCH
+
+                    if search_method is PathSearchMethods.LESS_THAN:
+                        search_method = PathSearchMethods.LESS_THAN_OR_EQUAL
+                    elif search_method is PathSearchMethods.GREATER_THAN:
+                        search_method = PathSearchMethods.GREATER_THAN_OR_EQUAL
+                    elif search_method is PathSearchMethods.EQUALS:
+                        # Allow ==
+                        continue
+                    elif search_method is None:
+                        search_method = PathSearchMethods.EQUALS
+
+                        if segment_id:
+                            search_attr = segment_id
+                            segment_id = ""
+                        else:
+                            raise YAMLPathException(
+                                "Missing search operand before operator, {}"
+                                .format(char)
+                                , yaml_path
+                            )
+                    else:
+                        raise YAMLPathException(
+                            "Unsupported search operator combination at {}"
+                            .format(char)
+                            , yaml_path
+                        )
+
+                    continue  # pragma: no cover
+
+                elif char == "~":
+                    if search_method == PathSearchMethods.EQUALS:
+                        search_method = PathSearchMethods.REGEX
+                        seeking_regex_delim = True
+                    else:
+                        raise YAMLPathException(
+                            ("Unexpected use of {} operator.  Please try =~ if"
+                             + " you mean to search with a Regular"
+                             + " Expression."
+                            ).format(char)
+                            , yaml_path
+                        )
+
+                    continue  # pragma: no cover
+
+                elif not segment_id:
+                    # All tests beyond this point require an operand
                     raise YAMLPathException(
-                        "Cannot add {} subreference to scalars".format(
-                            str(curtyp)
-                        ),
-                        original_path,
-                        unstripped_ele
+                        "Missing search operand before operator, {}"
+                        .format(char)
+                        , yaml_path
                     )
 
-        else:
-            self.log.debug(
-                ("YAMLPath::_ensure_path:  Finally returning data of type"
-                 + " {}:"
-                ).format(type(data))
+                elif char == "^":
+                    # Value starts with
+                    segment_type = PathSegmentTypes.SEARCH
+                    search_method = PathSearchMethods.STARTS_WITH
+                    if segment_id:
+                        search_attr = segment_id
+                        segment_id = ""
+                    continue
+
+                elif char == "$":
+                    # Value ends with
+                    segment_type = PathSegmentTypes.SEARCH
+                    search_method = PathSearchMethods.ENDS_WITH
+                    if segment_id:
+                        search_attr = segment_id
+                        segment_id = ""
+                    continue
+
+                elif char == "%":
+                    # Value contains
+                    segment_type = PathSegmentTypes.SEARCH
+                    search_method = PathSearchMethods.CONTAINS
+                    if segment_id:
+                        search_attr = segment_id
+                        segment_id = ""
+                    continue
+
+                elif char == ">":
+                    # Value greater than
+                    segment_type = PathSegmentTypes.SEARCH
+                    search_method = PathSearchMethods.GREATER_THAN
+                    if segment_id:
+                        search_attr = segment_id
+                        segment_id = ""
+                    continue
+
+                elif char == "<":
+                    # Value less than
+                    segment_type = PathSegmentTypes.SEARCH
+                    search_method = PathSearchMethods.LESS_THAN
+                    if segment_id:
+                        search_attr = segment_id
+                        segment_id = ""
+                    continue
+
+            elif (
+                    demarc_count > 0
+                    and char == "]"
+                    and demarc_stack[-1] == "["
+            ):
+                # Store the INDEX, SLICE, or SEARCH parameters
+                if (
+                        segment_type is PathSegmentTypes.INDEX
+                        and ':' not in segment_id
+                ):
+                    try:
+                        idx = int(segment_id)
+                    except ValueError:
+                        raise YAMLPathException(
+                            "Not an integer index:  {}".format(segment_id)
+                            , yaml_path
+                        )
+                    path_segments.append((segment_type, idx))
+                elif (
+                        segment_type is PathSegmentTypes.SEARCH
+                        and search_method is not None
+                ):
+                    # Undemarcate the search term, if it is so
+                    if segment_id and segment_id[0] in ["'", '"']:
+                        leading_mark = segment_id[0]
+                        if segment_id[-1] == leading_mark:
+                            segment_id = segment_id[1:-1]
+
+                    path_segments.append((
+                        segment_type,
+                        SearchTerms(search_inverted, search_method,
+                                    search_attr, segment_id)
+                    ))
+                else:
+                    path_segments.append((segment_type, segment_id))
+
+                segment_id = ""
+                segment_type = None
+                demarc_stack.pop()
+                demarc_count -= 1
+                search_method = None
+                continue
+
+            elif demarc_count < 1 and char == pathsep:
+                # Do not store empty elements
+                if segment_id:
+                    # Unless its type has already been identified as a special
+                    # type, assume it is a KEY.
+                    if segment_type is None:
+                        segment_type = PathSegmentTypes.KEY
+                    path_segments.append((segment_type, segment_id))
+                    segment_id = ""
+
+                segment_type = None
+                continue
+
+            segment_id += char
+            seeking_anchor_mark = False
+            seeking_collector_operator = False
+
+        # Check for unmatched subpath demarcations
+        if collector_level > 0:
+            raise YAMLPathException(
+                "YAML Path contains an unmatched () collector pair",
+                yaml_path
             )
-            self.log.debug(data)
 
-            yield data
+        # Check for unterminated RegExes
+        if capturing_regex:
+            raise YAMLPathException(
+                "YAML Path contains an unterminated Regular Expression",
+                yaml_path
+            )
 
-    @staticmethod
-    def default_for_child(yaml_path, value=None):
-        """Identifies and returns the most appropriate default value for the
-        next entry in a YAML Path, should it not already exist.
+        # Check for mismatched demarcations
+        if demarc_count > 0:
+            raise YAMLPathException(
+                "YAML Path contains at least one unmatched demarcation mark",
+                yaml_path
+            )
 
-        Positional Parameters:
-          1. yaml_path (deque) The pre-parsed YAML Path to follow
-          2. value (any) The final expected value for the final YAML Path entry
+        # Store the final element_id, which must have been a KEY
+        if segment_id:
+            # Unless its type has already been identified as a special
+            # type, assume it is a KEY.
+            if segment_type is None:
+                segment_type = PathSegmentTypes.KEY
+            path_segments.append((segment_type, segment_id))
 
-        Returns:  (any) The most appropriate default value
-
-        Raises:  N/A
-        """
-        if yaml_path is None or not yaml_path:
-            return value
-
-        default_value = value
-        (typ, _) = yaml_path[0]
-        if typ == PathSegmentTypes.INDEX:
-            default_value = CommentedSeq()
-        elif typ == PathSegmentTypes.KEY:
-            default_value = CommentedMap()
-        elif isinstance(value, str):
-            default_value = PlainScalarString("")
-        elif isinstance(value, bool):
-            default_value = ScalarBoolean(False)
-        elif isinstance(value, int):
-            default_value = ScalarInt(maxsize)
-        elif isinstance(value, float):
-            default_value = ScalarFloat("inf")
-
-        return default_value
-
-    @staticmethod
-    def append_list_element(data, value=None, anchor=None):
-        """Appends a new element to an ruamel.yaml presented list, preserving
-        any tailing comment for the former last element of the same list.
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. value (any) The value of the element to append
-          3. anchor (str) An Anchor or Alias name for the new element
-
-        Returns:  (object) The newly appended element node
-
-        Raises:  N/A
-        """
-
-        if anchor is not None and value is not None:
-            value = YAMLPath.wrap_type(value)
-            if not hasattr(value, "anchor"):
-                raise ValueError(
-                    "Impossible to add an Anchor to value:  {}".format(value)
-                )
-            value.yaml_set_anchor(anchor)
-
-        old_tail_pos = len(data) - 1
-        data.append(value)
-        new_element = data[-1]
-
-        # Note that ruamel.yaml will inexplicably add a newline before the tail
-        # element irrespective of this ca handling.  This issue appears to be
-        # uncontrollable, from here.
-        if hasattr(data, "ca") and old_tail_pos in data.ca.items:
-            old_comment = data.ca.items[old_tail_pos][0]
-            if old_comment is not None:
-                data.ca.items[old_tail_pos][0] = None
-                data.ca.items[old_tail_pos + 1] = [
-                    old_comment, None, None, None
-                ]
-
-        return new_element
-
-    @staticmethod
-    def wrap_type(value):
-        """Wraps a value in one of the ruamel.yaml wrapper types.
-
-        Positional Parameters:
-          1. value (any) The value to wrap.
-
-        Returns: (any) The wrapped value or the original value when a better
-          wrapper could not be identified.
-
-        Raises:  N/A
-        """
-        wrapped_value = value
-        typ = type(value)
-        if typ is list:
-            wrapped_value = CommentedSeq(value)
-        elif typ is dict:
-            wrapped_value = CommentedMap(value)
-        elif typ is str:
-            wrapped_value = PlainScalarString(value)
-        elif typ is int:
-            wrapped_value = ScalarInt(value)
-        elif typ is float:
-            wrapped_value = ScalarFloat(value)
-        elif typ is bool:
-            wrapped_value = ScalarBoolean(value)
-
-        return wrapped_value
-
-    @staticmethod
-    def clone_node(node):
-        """Duplicates a YAML Data node.
-
-        Positional Parameters:
-          1. node (object) The node to clone.
-
-        Returns: (object) Clone of the given node
-        """
-        # Clone str values lest the new node change whenever the original node
-        # changes, which defeates the intention of preserving the present,
-        # pre-change value to an entirely new node.
-        clone_value = node
-        if isinstance(clone_value, str):
-            clone_value = ''.join(node)
-
-        if hasattr(node, "anchor"):
-            return type(node)(clone_value, anchor=node.anchor.value)
-        return type(node)(clone_value)
-
-    @staticmethod
-    def make_new_node(source_node, value, value_format):
-        """Creates a new data node given a value and its presumed format.
-        """
-        new_node = None
-        new_type = type(source_node)
-        new_value = value
-        valform = YAMLValueFormats.DEFAULT
-
-        if isinstance(value_format, YAMLValueFormats):
-            valform = value_format
-        else:
-            strform = str(value_format)
-            try:
-                valform = YAMLValueFormats.from_str(strform)
-            except NameError:
-                raise NameError(
-                    "Unknown YAML Value Format:  {}".format(strform)
-                    + ".  Please specify one of:  "
-                    + ", ".join(
-                        [l.lower() for l in YAMLValueFormats.get_names()]
-                    )
-                )
-
-        if valform == YAMLValueFormats.BARE:
-            new_type = PlainScalarString
-            new_value = str(value)
-        elif valform == YAMLValueFormats.DQUOTE:
-            new_type = DoubleQuotedScalarString
-            new_value = str(value)
-        elif valform == YAMLValueFormats.SQUOTE:
-            new_type = SingleQuotedScalarString
-            new_value = str(value)
-        elif valform == YAMLValueFormats.FOLDED:
-            new_type = FoldedScalarString
-            new_value = str(value)
-        elif valform == YAMLValueFormats.LITERAL:
-            new_type = LiteralScalarString
-            new_value = str(value)
-        elif valform == YAMLValueFormats.BOOLEAN:
-            new_type = ScalarBoolean
-            if isinstance(value, bool):
-                new_value = value
-            else:
-                new_value = strtobool(value)
-        elif valform == YAMLValueFormats.FLOAT:
-            try:
-                new_value = float(value)
-            except ValueError:
-                raise ValueError(
-                    "The requested value format is {}, but '{}' cannot be cast\
-                     to a floating-point number.".format(valform, value)
-                )
-
-            strval = str(value)
-            precision = 0
-            width = len(strval)
-            lastdot = strval.rfind(".")
-            if -1 < lastdot:
-                precision = strval.rfind(".")
-
-            if hasattr(source_node, "anchor"):
-                new_node = ScalarFloat(
-                    new_value
-                    , anchor=source_node.anchor.value
-                    , prec=precision
-                    , width=width
-                )
-            else:
-                new_node = ScalarFloat(new_value, prec=precision, width=width)
-        elif valform == YAMLValueFormats.INT:
-            new_type = ScalarInt
-
-            try:
-                new_value = int(value)
-            except ValueError:
-                raise ValueError(
-                    "The requested value format is {}, but '{}' cannot be cast\
-                     to an integer number.".format(valform, value)
-                )
-        else:
-            # Punt to whatever the best type may be
-            new_type = type(YAMLPath.wrap_type(value))
-
-        if new_node is None:
-            if hasattr(source_node, "anchor"):
-                new_node = new_type(new_value, anchor=source_node.anchor.value)
-            else:
-                new_node = new_type(new_value)
-
-        return new_node
-
-    @staticmethod
-    def update_node(data, source_node, value, value_format):
-        """Recursively updates the value of a YAML Node and any references to it
-        within the entire YAML data structure (Anchors and Aliases, if any).
-
-        Positional Parameters:
-          1. data (ruamel.yaml data) The parsed YAML data to process
-          2. source_node (object) The YAML Node to update
-          3. value (any) The new value to assign to the source_node and
-             its references
-          4. value_format (YAMLValueFormats) the YAML representation of the
-             value
-
-        Returns: N/A
-
-        Raises:
-          No Exception but it will terminate the program after printing
-          a console error when value_format is illegal for the given value or
-          is unknown.
-        """
-        # Change val has already been made to obj in data.  When obj is either
-        # an Anchor or an Alias, all other references to it must also receive
-        # an identical update so they are kept in synchronization.  In addition,
-        # if obj is a child of a parent that is an Anchor or Alias, all
-        # references to that parent must also be updated.
-        def update_refs(data, reference_node, replacement_node):
-            if isinstance(data, dict):
-                for i, k in [
-                    (idx, key) for idx, key in
-                        enumerate(data.keys()) if key is reference_node
-                ]:
-                    data.insert(i, replacement_node, data.pop(k))
-                for k, val in data.non_merged_items():
-                    if val is reference_node:
-                        data[k] = replacement_node
-                    else:
-                        update_refs(val, reference_node, replacement_node)
-            elif isinstance(data, list):
-                for idx, item in enumerate(data):
-                    if item is reference_node:
-                        data[idx] = replacement_node
-                    else:
-                        update_refs(item, reference_node, replacement_node)
-
-        new_node = YAMLPath.make_new_node(source_node, value, value_format)
-        update_refs(data, source_node, new_node)
+        return path_segments
