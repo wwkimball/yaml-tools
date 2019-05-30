@@ -252,7 +252,7 @@ class YAMLPath:
 
         # Infer the first possible position for a top-level Anchor mark
         first_anchor_pos = 0
-        if self.seperator is PathSeperators.FSLASH:
+        if self.seperator is PathSeperators.FSLASH and len(yaml_path) > 1:
             first_anchor_pos = 1
         seeking_anchor_mark = yaml_path[first_anchor_pos] == "&"
 

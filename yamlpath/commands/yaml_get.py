@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=locally-disabled,invalid-name
 """
 Retrieves one or more values from a YAML file at a specified YAML Path.
 Output is printed to STDOUT, one line per match.  When a result is a complex
@@ -8,14 +6,14 @@ result.  EYAML can be employed to decrypt the values.
 
 Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
-import sys
 import argparse
 import json
 from os import access, R_OK
 from os.path import isfile
 
-from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
+from ruamel.yaml.composer import ComposerError
+from ruamel.yaml.scanner import ScannerError
 
 from yamlpath import YAMLPath
 from yamlpath.exceptions import YAMLPathException
@@ -24,9 +22,10 @@ from yamlpath.enums import PathSeperators
 from yamlpath.eyaml import EYAMLProcessor
 
 from yamlpath.wrappers import ConsolePrinter
+from yamlpath.func import get_yaml_editor
 
 # Implied Constants
-MY_VERSION = "1.0.3"
+MY_VERSION = "1.0.4"
 
 def processcli():
     """Process command-line arguments."""
@@ -97,6 +96,7 @@ def validateargs(args, log):
     if args.privatekey and not (
             isfile(args.privatekey) and access(args.privatekey, R_OK)
     ):
+        has_errors = True
         log.error(
             "EYAML private key is not a readable file:  " + args.privatekey
         )
@@ -105,6 +105,7 @@ def validateargs(args, log):
     if args.publickey and not (
             isfile(args.publickey) and access(args.publickey, R_OK)
     ):
+        has_errors = True
         log.error(
             "EYAML public key is not a readable file:  " + args.publickey
         )
@@ -116,6 +117,7 @@ def validateargs(args, log):
             (args.publickey and not args.privatekey)
             or (args.privatekey and not args.publickey)
     ):
+        has_errors = True
         log.error("Both private and public EYAML keys must be set.")
 
     if has_errors:
@@ -129,17 +131,13 @@ def main():
     yaml_path = YAMLPath(args.query, pathsep=args.pathsep)
 
     # Prep the YAML parser
-    yaml = YAML()
-    yaml.indent(mapping=2, sequence=4, offset=2)
-    yaml.explicit_start = True
-    yaml.preserve_quotes = True
-    yaml.width = sys.maxsize
+    yaml = get_yaml_editor()
 
     # Attempt to open the YAML file; check for parsing errors
 
     try:
-        with open(args.yaml_file, 'r') as f:
-            yaml_data = yaml.load(f)
+        with open(args.yaml_file, 'r') as fhnd:
+            yaml_data = yaml.load(fhnd)
     except FileNotFoundError:
         log.critical("YAML_FILE not found:  {}".format(args.yaml_file), 2)
     except ParserError as ex:
@@ -148,11 +146,23 @@ def main():
             .format(str(ex.problem_mark).lstrip(), ex.problem)
             , 1
         )
+    except ComposerError as ex:
+        log.critical(
+            "YAML composition error {}:  {}"
+            .format(str(ex.problem_mark).lstrip(), ex.problem)
+            , 1
+        )
+    except ScannerError as ex:
+        log.critical(
+            "YAML syntax error {}:  {}"
+            .format(str(ex.problem_mark).lstrip(), ex.problem)
+            , 1
+        )
 
     # Seek the queried value(s)
     discovered_nodes = []
     processor = EYAMLProcessor(
-        log, yaml_data, eyaml=args.eyaml,
+        log, yaml_data, binary=args.eyaml,
         publickey=args.publickey, privatekey=args.privatekey)
     try:
         for node in processor.get_eyaml_values(yaml_path, mustexist=True):
@@ -163,9 +173,6 @@ def main():
     except EYAMLCommandException as ex:
         log.critical(ex, 2)
 
-    if not discovered_nodes:
-        log.critical("No matches for {}!".format(yaml_path), 3)
-
     for node in discovered_nodes:
         if isinstance(node, (dict, list)):
             print(json.dumps(node))
@@ -173,4 +180,4 @@ def main():
             print("{}".format(str(node).replace("\n", r"\n")))
 
 if __name__ == "__main__":
-    main()
+    main()  # pragma: no cover

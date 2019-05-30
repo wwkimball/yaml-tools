@@ -1,3 +1,21 @@
+2.0.2:
+Bug Fixes:
+* eyaml-rotate-keys was broken by the refactoring for 2.0.0.  eyaml-rotate-keys
+  v1.0.2 restores functionality.
+
+Enhancements:
+* Command-line tools are now managed via pip as entry_points/console_scripts
+  rather than external binaries.  This enables superior cross-platform
+  compatibility as well as unit testing.  As such, all of the CLI tools have
+  been updated pursuant to (generally trivial, excepting eyaml-rotate-keys)
+  issues discovered during their newfound CI tests.
+
+2.0.1:
+Bug Fixes:
+* yaml-set v1.0.4 lost track of EYAML block formatting between read and write,
+  causing replacement values to use unexpected formatting.  This is fixed in
+  yaml-set v.1.0.5.
+
 2.0.0:
 Enhancements:
 * Added Collectors to YAML Path expressions.  These take the form of "(YAML

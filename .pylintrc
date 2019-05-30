@@ -62,10 +62,13 @@ confidence=
 # --disable=W".
 
 # WWK-2019-05-24: Disable R0401 because I cannot get pylint to throw it on my
-# OSX box yet Travis throws it on every run.  Until OSX and Travis can agree on
-# when an R0401 occurs, I cannot troubleshoot what otherwise appear to be
-# false-positives.
-disable=R0401
+#     OSX box yet Travis throws it on every run.  Until OSX and Travis can agree
+#     on when an R0401 occurs, I cannot troubleshoot what otherwise appear to be
+#     false-positives.
+# WWK-2019-05-30: Disable R0801 because similar command-line tools necessarily
+#     share duplicate code.  This is by design so each can stand-alone.
+disable=R0401,
+      R0801
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

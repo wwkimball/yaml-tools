@@ -7,7 +7,7 @@ python:
   - 3.6
 
 install:
-  - pip install --upgrade ruamel.yaml mypy pytest pytest-cov pylint coveralls
+  - pip install --upgrade ruamel.yaml mypy pytest pytest-cov pytest-console-scripts pylint coveralls
   - gem install hiera-eyaml
 
 script:

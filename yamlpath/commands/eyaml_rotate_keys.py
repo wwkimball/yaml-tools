@@ -1,29 +1,29 @@
-#!/usr/bin/env python3
-# pylint: disable=locally-disabled,invalid-name
 """
 Rotates the encryption keys used for all EYAML values within a set of YAML
 files, decrypting with old keys and re-encrypting using replacement keys.
 
 Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
-import sys
 import argparse
 from shutil import copy2
 from os import remove, access, R_OK
 from os.path import isfile, exists
 
-from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
+from ruamel.yaml.composer import ComposerError
+from ruamel.yaml.scanner import ScannerError
 from ruamel.yaml.scalarstring import FoldedScalarString
 
 from yamlpath.eyaml.exceptions import EYAMLCommandException
 from yamlpath.eyaml import EYAMLProcessor
 
+# pylint: disable=locally-disabled,unused-import
 import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
+from yamlpath.func import get_yaml_editor
 
 # Implied Constants
-MY_VERSION = "1.0.1"
+MY_VERSION = "1.0.2"
 
 def processcli():
     """Process command-line arguments."""
@@ -93,23 +93,21 @@ def validateargs(args, log):
     if has_errors:
         exit(1)
 
+# pylint: disable=locally-disabled,too-many-locals,too-many-branches,too-many-statements
 def main():
     """Main code."""
     # Process any command-line arguments
     args = processcli()
     log = ConsolePrinter(args)
     validateargs(args, log)
-    processor = EYAMLProcessor(log, None, eyaml=args.eyaml)
+    processor = EYAMLProcessor(log, None, binary=args.eyaml)
 
     # Prep the YAML parser
-    yaml = YAML()
-    yaml.indent(mapping=2, sequence=4, offset=2)
-    yaml.explicit_start = True
-    yaml.preserve_quotes = True
-    yaml.width = sys.maxsize
+    yaml = get_yaml_editor()
 
     # Process the input file(s)
     in_file_count = len(args.yaml_files)
+    exit_state = 0
     for yaml_file in args.yaml_files:
         file_changed = False
         backup_file = yaml_file + ".bak"
@@ -118,6 +116,7 @@ def main():
         # Each YAML_FILE must actually be a file
         if not isfile(yaml_file):
             log.error("Not a file:  {}".format(yaml_file))
+            exit_state = 2
             continue
 
         # Don't bother with the file change update when there's only one input
@@ -129,12 +128,20 @@ def main():
         try:
             with open(yaml_file, 'r') as fhnd:
                 yaml_data = yaml.load(fhnd)
-        except FileNotFoundError:
-            log.error("YAML_FILE not found:  {}".format(args.yaml_file))
-            continue
         except ParserError as ex:
             log.error("YAML parsing error {}:  {}"
                       .format(str(ex.problem_mark).lstrip(), ex.problem))
+            exit_state = 3
+            continue
+        except ComposerError as ex:
+            log.error("YAML composition error {}:  {}"
+                      .format(str(ex.problem_mark).lstrip(), ex.problem))
+            exit_state = 3
+            continue
+        except ScannerError as ex:
+            log.error("YAML syntax error {}:  {}"
+                      .format(str(ex.problem_mark).lstrip(), ex.problem))
+            exit_state = 3
             continue
 
         # Process all EYAML values
@@ -143,7 +150,7 @@ def main():
             # Use ::get_nodes() instead of ::get_eyaml_values() here in order
             # to ignore values that have already been decrypted via their
             # Anchors.
-            for node in processor.get_nodes(yaml_data, yaml_path):
+            for node in processor.get_nodes(yaml_path):
                 # Ignore values which are Aliases for those already decrypted
                 anchor_name = (
                     node.anchor.value if hasattr(node, "anchor") else None
@@ -161,10 +168,8 @@ def main():
                 try:
                     txtval = processor.decrypt_eyaml(node)
                 except EYAMLCommandException as ex:
-                    log.critical(ex, 2)
-
-                if txtval is None:
-                    # A warning about this failure has already been printed
+                    log.error(ex)
+                    exit_state = 3
                     continue
 
                 # Prefer block (folded) values unless the original YAML value
@@ -180,7 +185,9 @@ def main():
                 try:
                     processor.set_eyaml_value(yaml_path, txtval, output=output)
                 except EYAMLCommandException as ex:
-                    log.critical(ex, 2)
+                    log.error(ex)
+                    exit_state = 3
+                    continue
 
                 file_changed = True
 
@@ -197,5 +204,7 @@ def main():
             with open(yaml_file, 'w') as yaml_dump:
                 yaml.dump(yaml_data, yaml_dump)
 
+    exit(exit_state)
+
 if __name__ == "__main__":
-    main()
+    main()  # pragma: no cover

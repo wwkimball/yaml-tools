@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=locally-disabled,invalid-name
 """
 Changes one or more values in a YAML file at a specified YAML Path.  Matched
 values can be checked before they are replaced to mitigate accidental change.
@@ -17,21 +15,24 @@ from os import remove, access, R_OK
 from os.path import isfile, exists
 from shutil import copy2
 
-from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
+from ruamel.yaml.composer import ComposerError
+from ruamel.yaml.scanner import ScannerError
 
 from yamlpath import YAMLPath
 from yamlpath.exceptions import YAMLPathException
-from yamlpath.eyaml.exceptions import EYAMLCommandException
-from yamlpath.eyaml import EYAMLProcessor
 from yamlpath.enums import YAMLValueFormats, PathSeperators
+from yamlpath.eyaml.exceptions import EYAMLCommandException
+from yamlpath.eyaml.enums import EYAMLOutputFormats
+from yamlpath.eyaml import EYAMLProcessor
 
+# pylint: disable=locally-disabled,unused-import
 import yamlpath.patches
-from yamlpath.func import clone_node
+from yamlpath.func import get_yaml_editor, clone_node
 from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
-MY_VERSION = "1.0.4"
+MY_VERSION = "1.0.6"
 
 def processcli():
     """Process command-line arguments."""
@@ -174,6 +175,7 @@ def validateargs(args, log):
     if has_errors:
         exit(1)
 
+# pylint: disable=locally-disabled,too-many-locals,too-many-branches,too-many-statements
 def main():
     """Main code."""
     args = processcli()
@@ -188,28 +190,22 @@ def main():
     elif args.stdin:
         new_value = ''.join(sys.stdin.readlines())
     elif args.file:
-        with open(args.file, 'r') as f:
-            new_value = f.read().rstrip()
+        with open(args.file, 'r') as fhnd:
+            new_value = fhnd.read().rstrip()
     elif args.random is not None:
         new_value = ''.join(
             secrets.choice(
                 string.ascii_uppercase + string.ascii_lowercase + string.digits
             ) for _ in range(args.random)
         )
-    else:
-        log.critical("Unsupported input method.", 1)
 
     # Prep the YAML parser
-    yaml = YAML()
-    yaml.indent(mapping=2, sequence=4, offset=2)
-    yaml.explicit_start = True
-    yaml.preserve_quotes = True
-    yaml.width = sys.maxsize
+    yaml = get_yaml_editor()
 
     # Attempt to open the YAML file; check for parsing errors
     try:
-        with open(args.yaml_file, 'r') as f:
-            yaml_data = yaml.load(f)
+        with open(args.yaml_file, 'r') as fhnd:
+            yaml_data = yaml.load(fhnd)
     except FileNotFoundError:
         log.critical("YAML_FILE not found:  {}".format(args.yaml_file), 2)
     except ParserError as ex:
@@ -218,12 +214,24 @@ def main():
             .format(str(ex.problem_mark).lstrip(), ex.problem)
             , 1
         )
+    except ComposerError as ex:
+        log.critical(
+            "YAML composition error {}:  {}"
+            .format(str(ex.problem_mark).lstrip(), ex.problem)
+            , 1
+        )
+    except ScannerError as ex:
+        log.critical(
+            "YAML syntax error {}:  {}"
+            .format(str(ex.problem_mark).lstrip(), ex.problem)
+            , 1
+        )
 
     # Load the present value at the specified YAML Path
     change_nodes = []
     old_format = YAMLValueFormats.DEFAULT
     processor = EYAMLProcessor(
-        log, yaml_data, eyaml=args.eyaml,
+        log, yaml_data, binary=args.eyaml,
         publickey=args.publickey, privatekey=args.privatekey)
     try:
         for node in processor.get_nodes(
@@ -234,9 +242,12 @@ def main():
     except YAMLPathException as ex:
         log.critical(ex, 1)
 
-    if not change_nodes:
-        log.warning("Nothing to do!")
-        exit(0)
+    if len(change_nodes) == 1:
+        # When there is exactly one result, its old format can be known.  This
+        # is necessary to retain whether the replacement value should be
+        # represented later as a multi-line string when the new value is to be
+        # encrypted.
+        old_format = YAMLValueFormats.from_node(change_nodes[0])
 
     log.debug("Collected nodes:")
     log.debug(change_nodes)
@@ -292,7 +303,6 @@ def main():
         # format, despite being properly typed.  To restore the original
         # written form, reverse the conversion, here.
         old_value = change_nodes[0]
-        old_format = YAMLValueFormats.from_node(old_value)
         if (
                 (old_format is YAMLValueFormats.FOLDED
                  or old_format is YAMLValueFormats.LITERAL
@@ -311,38 +321,26 @@ def main():
     # Set the requested value
     log.verbose("Setting the new value for {}.".format(change_path))
     if args.eyamlcrypt:
-        output_type = "string"
-        try:
-            format_type = YAMLValueFormats.from_str(args.format)
-        except NameError:
-            log.critical(
-                "Unknown YAML value format ,{}.".format(args.format), 1
-            )
-
         # If the user hasn't specified a format, use the same format as the
         # value being replaced, if known.
+        format_type = YAMLValueFormats.from_str(args.format)
         if format_type is YAMLValueFormats.DEFAULT:
             format_type = old_format
 
+        output_type = EYAMLOutputFormats.STRING
         if format_type in [YAMLValueFormats.FOLDED, YAMLValueFormats.LITERAL]:
-            output_type = "block"
+            output_type = EYAMLOutputFormats.BLOCK
+
         try:
             processor.set_eyaml_value(
                 change_path, new_value
                 , output=output_type
                 , mustexist=False
             )
-        except YAMLPathException as ex:
-            log.critical(ex, 1)
         except EYAMLCommandException as ex:
             log.critical(ex, 2)
     else:
-        try:
-            processor.set_value(
-                change_path, new_value, value_format=args.format
-            )
-        except YAMLPathException as ex:
-            log.critical(ex, 1)
+        processor.set_value(change_path, new_value, value_format=args.format)
 
     # Save a backup of the original file, if requested
     if args.backup:
@@ -359,4 +357,4 @@ def main():
         yaml.dump(yaml_data, yaml_dump)
 
 if __name__ == "__main__":
-    main()
+    main()  # pragma: no cover

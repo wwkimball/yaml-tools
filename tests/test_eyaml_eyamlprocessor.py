@@ -1,28 +1,18 @@
 import pytest
 
-from types import SimpleNamespace
 from subprocess import run, CalledProcessError
 
 from ruamel.yaml import YAML
 
 import yamlpath.patches
+from yamlpath.enums import YAMLValueFormats
 from yamlpath.eyaml.enums import EYAMLOutputFormats
 from yamlpath.eyaml import EYAMLProcessor
 from yamlpath.wrappers import ConsolePrinter
 from yamlpath.eyaml.exceptions import EYAMLCommandException
 
-requireseyaml = pytest.mark.skipif(
-    EYAMLProcessor.get_eyaml_executable("eyaml") is None
-    , reason="The 'eyaml' command must be installed and accessible on the PATH"
-        + " to test and use EYAML features.  Try:  'gem install hiera-eyaml'"
-        + " after intalling ruby and rubygems."
-)
+from tests.conftest import requireseyaml, quiet_logger, old_eyaml_keys
 
-@pytest.fixture
-def logger_f():
-    """Returns a quiet ConsolePrinter."""
-    args = SimpleNamespace(verbose=False, quiet=True, debug=False)
-    return ConsolePrinter(args)
 
 @requireseyaml
 @pytest.fixture
@@ -105,83 +95,6 @@ aliased::secrets:
     yaml = YAML()
     return yaml.load(data)
 
-@requireseyaml
-@pytest.fixture(scope="module")
-def eyamlkeys(tmp_path_factory):
-    """Creates temporary keys for encryption/decryption tests."""
-    private_key_file_name = "private_key.pkcs7.pem"
-    public_key_file_name = "public_key.pkcs7.pem"
-    old_key_path_name = "old-keys"
-    new_key_path_name = "new-keys"
-    old_private_key_file = tmp_path_factory.mktemp(old_key_path_name) / private_key_file_name
-    old_public_key_file = tmp_path_factory.mktemp(old_key_path_name) / public_key_file_name
-    new_private_key_file = tmp_path_factory.mktemp(new_key_path_name) / private_key_file_name
-    new_public_key_file = tmp_path_factory.mktemp(new_key_path_name) / public_key_file_name
-
-    old_private_key = r"""-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA1BuytnsdHdt6NkNfLoGJIlf9hrWux8raPP3W57cONh2MrQ6d
-aoAX+L+igTSjvSTI6oxsO0dqdYXZO1+rOK3gI9OnZQhkCjq9IRoWx7AIvM7skaD0
-Lne9YsvA7mGY/z9lm3IALI6OBVV5k6xnBR2PVi6A7FnDm0CRLit2Bn9eHLN3k4oL
-S/ynxgXBmWWgnKtJNJwGmeD5PwzJfXCcJ3kPItiktFizJZoPmAlBP7LIzamlfSXV
-VoniRs45aGrTGpmZSdvossL41KBCYJGjP+lIL/UpDJHBeiuqVQoDl4/UZqb5xF9S
-C2p2Of21fmZmj4uUAT5FPtKMKCspmLWQeUEfiwIDAQABAoIBAEyXR9wu7p+mbiYE
-A+22Jr+5CDpJhrhsXovhmWWIq2ANIYwoF92qLX3MLTD8whd9nfNcC4UIT7/qOjv/
-WsOXvbUSK4MHGaC7/ylh01H+Fdmf2rrnZOUWpdN0AdHSej3JNbaA3uE4BL6WU9Vo
-TrcBKo4TMsilzUVVdlc2qGLGQUSZPLnIJWMLQIdCe2kZ9YvUlGloD4uGT3RH6+vH
-TOtXqDgLGS/79K0rnflnBsUBkXpukxzOcTRHxR0s7SJ2XCB0JfdLWfR6X1nzM4mh
-rn/m2nzEOG9ICe5hoHqAEZ/ezKd/jwxMg1YMZnGAzDMw7/UPWo87wgVdxxOHOsHG
-v/pK+okCgYEA/SToT82qtvWIiUTbkdDislGhTet2eEu2Bi9wCxAUQn045Y812r9d
-TvJyfKJyvvpxzejaecJb8oOXyypMDay7aPOVBI1E2OqfImxF8pJ0QqejAUCinXrj
-KnV72L/hjTavivWq1vHZYXSxufAMG0C7UeztwkOfk85N3wuuYYWYrc0CgYEA1oBG
-2fQ0PXDyionE3c4bpRGZMJxD+3RFRMCJiE+xheRR22ObSDLUH123ZGmU0m2FTS9O
-M+GJbZgdV1Oe0EJ5rWfzFYUmVJIreH+oQWaY/HMkoe705LAMcPyd0bSjRVWWiz+l
-anIGjj5HaPSI7XFqdQu7j3ww67k4BBAca8++arcCgYA/cIhnt3sY7t+QxxjfqiGl
-3p82D9RYwWCUnD7QBu+M2iTwIru0XlDcABaA9ZUcF1d96uUVroesdx4LZEY7BxbQ
-bnrh8SVX1zSaQ9gjumA4dBp9rd0S6kET2u12nF/CK/pCMN7njySTL9N6bZYbHlXT
-ajULgjbzq7gINb01420n4QKBgQCqu0epy9qY3QHwi2ALPDZ82NkZ/AeQaieIZcgS
-m3wtmmIdQdcjTHHS1YFXh0JRi6MCoJiaavY8KUuRapmKIp8/CvJNOsIbpoy7SMDf
-7Y3vwqZxzgVW0VnVxPzJIgKi+VDuXSaI52GYbrHgNGOYuyGFMGWF+8/kkHSppzk4
-Bw8FWQKBgQCo/7cV19n3e7ZlZ/aGhIOtSCTopMBV8/9PIw+s+ZDiQ7vRSj9DwkAQ
-+x97V0idgh16tnly0xKvGCGTQR7qDsDTjHmmF4LZUGjcq7pHsTi/umCM/toE+BCk
-7ayr+G0DWr5FjhQ7uCt2Rz1NKcj6EkDcM1WZxkDLAvBXjlj+T+eqtQ==
------END RSA PRIVATE KEY-----
-"""
-    old_public_key = r"""-----BEGIN CERTIFICATE-----
-MIIC2TCCAcGgAwIBAgIBATANBgkqhkiG9w0BAQsFADAAMCAXDTE5MDUwNzE4MDAw
-NVoYDzIwNjkwNDI0MTgwMDA1WjAAMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
-CgKCAQEA1BuytnsdHdt6NkNfLoGJIlf9hrWux8raPP3W57cONh2MrQ6daoAX+L+i
-gTSjvSTI6oxsO0dqdYXZO1+rOK3gI9OnZQhkCjq9IRoWx7AIvM7skaD0Lne9YsvA
-7mGY/z9lm3IALI6OBVV5k6xnBR2PVi6A7FnDm0CRLit2Bn9eHLN3k4oLS/ynxgXB
-mWWgnKtJNJwGmeD5PwzJfXCcJ3kPItiktFizJZoPmAlBP7LIzamlfSXVVoniRs45
-aGrTGpmZSdvossL41KBCYJGjP+lIL/UpDJHBeiuqVQoDl4/UZqb5xF9SC2p2Of21
-fmZmj4uUAT5FPtKMKCspmLWQeUEfiwIDAQABo1wwWjAPBgNVHRMBAf8EBTADAQH/
-MB0GA1UdDgQWBBTUHb3HX8dBfYFL1J1sCv+uCum5AzAoBgNVHSMEITAfgBTUHb3H
-X8dBfYFL1J1sCv+uCum5A6EEpAIwAIIBATANBgkqhkiG9w0BAQsFAAOCAQEAcw+0
-dfHSLNAZD95G2pDnT2qShjmdLdbrDQhAXWhLeoWpXsKvC0iUyQaOF9ckl++tHM2g
-ejm1vEOrZ+1uXK3qnMXPF99Wet686OhyoDt262Mt3wzGHNijAHEvQtjap8ZIwfOM
-zFTvjmOlUScqF/Yg+htcGnJdQhWIrsD+exiY5Kz2IMtuW+yWLLP8bY5vPg6qfrp2
-4VVJ3Md1gdSownd1Au5tqPXm6VfSgLiCm9iDPVsjDII9h8ydate1d2TBHPup+4tN
-JZ5/muctimydC+S2oCn7ucsilxZD89N7rJjKXNfoUOGHjOEVQMa8RtZLzH2sUEaS
-FktE6rH8a+8SwO+TGw==
------END CERTIFICATE-----
-"""
-
-    with open(old_private_key_file, 'w') as key_file:
-        key_file.write(old_private_key)
-    with open(old_public_key_file, 'w') as key_file:
-        key_file.write(old_public_key)
-
-    eyaml_cmd = EYAMLProcessor.get_eyaml_executable("eyaml")
-    run(
-        "{} createkeys --pkcs7-private-key={} --pkcs7-public-key={}"
-        .format(eyaml_cmd, new_private_key_file, new_public_key_file).split()
-    )
-
-    return (
-        old_private_key_file, old_public_key_file,
-        new_private_key_file, new_public_key_file
-    )
-
 @pytest.fixture
 def force_subprocess_run_cpe(monkeypatch):
     import yamlpath.eyaml.eyamlprocessor as break_module
@@ -201,8 +114,8 @@ def force_no_access(monkeypatch):
     monkeypatch.setattr(break_module, "access", fake_access)
 
 class Test_eyaml_EYAMLProcessor():
-    def test_find_eyaml_paths(self, logger_f, eyamldata_f):
-        processor = EYAMLProcessor(logger_f, eyamldata_f)
+    def test_find_eyaml_paths(self, quiet_logger, eyamldata_f):
+        processor = EYAMLProcessor(quiet_logger, eyamldata_f)
         expected = [
             "aliases[&secretIdentity]",
             "aliases[&secretPhrase]",
@@ -225,8 +138,8 @@ class Test_eyaml_EYAMLProcessor():
         ("aliases[&secretIdentity]", "This is not the identity you are looking for."),
         ("aliases[&secretPhrase]", "There is no secret phrase."),
     ])
-    def test_happy_get_eyaml_values(self, logger_f, eyamldata_f, eyamlkeys, yaml_path, compare):
-        processor = EYAMLProcessor(logger_f, eyamldata_f, privatekey=eyamlkeys[0], publickey=eyamlkeys[1])
+    def test_happy_get_eyaml_values(self, quiet_logger, eyamldata_f, old_eyaml_keys, yaml_path, compare):
+        processor = EYAMLProcessor(quiet_logger, eyamldata_f, privatekey=old_eyaml_keys[0], publickey=old_eyaml_keys[1])
         for node in processor.get_eyaml_values(yaml_path, True):
             assert node == compare
 
@@ -235,8 +148,8 @@ class Test_eyaml_EYAMLProcessor():
         ("aliases[&secretIdentity]", "This is your new identity.", True, EYAMLOutputFormats.STRING),
         ("aliases[&brandNewEntry]", "This key doesn't already exist.", False, EYAMLOutputFormats.BLOCK),
     ])
-    def test_happy_set_eyaml_value(self, logger_f, eyamldata_f, eyamlkeys, yaml_path, compare, mustexist, output_format):
-        processor = EYAMLProcessor(logger_f, eyamldata_f, privatekey=eyamlkeys[0], publickey=eyamlkeys[1])
+    def test_happy_set_eyaml_value(self, quiet_logger, eyamldata_f, old_eyaml_keys, yaml_path, compare, mustexist, output_format):
+        processor = EYAMLProcessor(quiet_logger, eyamldata_f, privatekey=old_eyaml_keys[0], publickey=old_eyaml_keys[1])
 
         # Set the test value
         processor.set_eyaml_value(yaml_path, compare, output_format, mustexist)
@@ -249,6 +162,24 @@ class Test_eyaml_EYAMLProcessor():
 
         assert EYAMLProcessor.is_eyaml_value(encvalue)
 
+    @requireseyaml
+    @pytest.mark.parametrize("yaml_path,newval,eoformat,yvformat", [
+        ("/aliased::secrets/novel_values/ident", "New, novel, encrypted identity in BLOCK format", EYAMLOutputFormats.BLOCK, YAMLValueFormats.FOLDED),
+        ("/aliased::secrets/string_values/ident", "New, novel, encrypted identity in STRING format", EYAMLOutputFormats.STRING, YAMLValueFormats.BARE),
+    ])
+    def test_preserve_old_blockiness(self, quiet_logger, eyamldata_f, old_eyaml_keys, yaml_path, newval, eoformat, yvformat):
+        processor = EYAMLProcessor(quiet_logger, eyamldata_f, privatekey=old_eyaml_keys[0], publickey=old_eyaml_keys[1])
+        processor.set_eyaml_value(yaml_path, newval, output=eoformat)
+
+        encvalue = None
+        encformat = YAMLValueFormats.DEFAULT
+        for encnode in processor.get_nodes(yaml_path):
+            encvalue = encnode
+            encformat = YAMLValueFormats.from_node(encvalue)
+            break
+
+        assert EYAMLProcessor.is_eyaml_value(encvalue) and yvformat == encformat
+
     def test_none_eyaml_value(self):
         assert False == EYAMLProcessor.is_eyaml_value(None)
 
@@ -260,59 +191,59 @@ class Test_eyaml_EYAMLProcessor():
     def test_impossible_eyaml_exe(self, exe):
         assert None == EYAMLProcessor.get_eyaml_executable(exe)
 
-    def test_not_can_run_eyaml(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_not_can_run_eyaml(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         processor.eyaml = None
         assert False == processor._can_run_eyaml()
 
     @requireseyaml
-    def test_bad_encryption_keys(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_bad_encryption_keys(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         processor.privatekey = "/no/such/file"
         processor.publickey = "/no/such/file"
 
         with pytest.raises(EYAMLCommandException):
             processor.encrypt_eyaml("test")
 
-    def test_no_encrypt_without_eyaml(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_no_encrypt_without_eyaml(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         processor.eyaml = None
         with pytest.raises(EYAMLCommandException):
             processor.encrypt_eyaml("test")
 
-    def test_no_decrypt_without_eyaml(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_no_decrypt_without_eyaml(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         processor.eyaml = None
         with pytest.raises(EYAMLCommandException):
             processor.decrypt_eyaml("ENC[...]")
 
-    def test_ignore_already_encrypted_cryps(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_ignore_already_encrypted_cryps(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         testval = "ENC[...]"
         assert testval == processor.encrypt_eyaml(testval)
 
-    def test_ignore_already_decrypted_cryps(self, logger_f):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_ignore_already_decrypted_cryps(self, quiet_logger):
+        processor = EYAMLProcessor(quiet_logger, None)
         testval = "some value"
         assert testval == processor.decrypt_eyaml(testval)
 
     @requireseyaml
-    def test_impossible_decryption(self, logger_f, eyamlkeys):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_impossible_decryption(self, quiet_logger, old_eyaml_keys):
+        processor = EYAMLProcessor(quiet_logger, None)
         testval = "ENC[...]"
         with pytest.raises(EYAMLCommandException):
             processor.decrypt_eyaml(testval)
 
-    def test_encrypt_calledprocesserror(self, logger_f, force_subprocess_run_cpe):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_encrypt_calledprocesserror(self, quiet_logger, force_subprocess_run_cpe):
+        processor = EYAMLProcessor(quiet_logger, None)
         with pytest.raises(EYAMLCommandException):
             processor.encrypt_eyaml("any value")
 
-    def test_decrypt_calledprocesserror(self, logger_f, force_subprocess_run_cpe):
-        processor = EYAMLProcessor(logger_f, None)
+    def test_decrypt_calledprocesserror(self, quiet_logger, force_subprocess_run_cpe):
+        processor = EYAMLProcessor(quiet_logger, None)
         with pytest.raises(EYAMLCommandException):
             processor.decrypt_eyaml("ENC[...]")
 
     @requireseyaml
-    def test_non_executable(self, eyamlkeys, force_no_access):
-        assert EYAMLProcessor.get_eyaml_executable(str(eyamlkeys[0])) is None
+    def test_non_executable(self, old_eyaml_keys, force_no_access):
+        assert EYAMLProcessor.get_eyaml_executable(str(old_eyaml_keys[0])) is None

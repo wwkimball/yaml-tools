@@ -14,12 +14,16 @@ from yamlpath.func import (
     append_list_element,
     build_next_node,
     clone_node,
+    get_yaml_editor,
     make_new_node,
     wrap_type,
 )
 
 
 class Test_func():
+    def test_get_yaml_editor(self):
+        assert get_yaml_editor()
+
     def test_anchorless_list_element_error(self):
         with pytest.raises(ValueError) as ex:
             append_list_element({}, YAMLPath("foo"), "bar")

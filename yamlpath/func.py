@@ -3,9 +3,11 @@ Collection of general helper functions.
 
 Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
+from sys import maxsize
 from distutils.util import strtobool
 from typing import Any
 
+from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedSeq, CommentedMap
 from ruamel.yaml.scalarstring import (
     PlainScalarString,
@@ -24,6 +26,22 @@ from yamlpath.enums import (
     PathSegmentTypes,
 )
 
+def get_yaml_editor() -> Any:
+    """
+    Builds and returns a generic YAML editor based on ruamel.yaml.
+
+    Parameters:  N/A
+
+    Returns (Any) The ready-for-use YAML editor.
+
+    Raises:  N/A
+    """
+    yaml = YAML()
+    yaml.indent(mapping=2, sequence=4, offset=2)
+    yaml.explicit_start = True
+    yaml.preserve_quotes = True
+    yaml.width = maxsize
+    return yaml
 
 def build_next_node(yaml_path: YAMLPath, depth: int,
                     value: Any = None) -> Any:
