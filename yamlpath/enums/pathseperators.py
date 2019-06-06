@@ -45,6 +45,25 @@ class PathSeperators(Enum):
         return [entry.name.upper() for entry in PathSeperators]
 
     @staticmethod
+    def get_choices() -> List[str]:
+        """
+        Returns all lower-cased entry names with symbolic representatins for
+        this enumeration.
+
+        Parameters:  N/A
+
+        Returns:  (List[str]) Lower-case names and symbols from this
+            enumeration
+
+        Raises:  N/A
+        """
+        names = [l.lower() for l in PathSeperators.get_names()]
+        symbols = [str(e) for e in PathSeperators]
+        choices = list(set(names + symbols))
+        choices.sort()
+        return choices
+
+    @staticmethod
     def from_str(name: str) -> "PathSeperators":
         """
         Converts a string value to a value of this enumeration, if valid.

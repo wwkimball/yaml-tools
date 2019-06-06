@@ -151,12 +151,20 @@ class ConsolePrinter:
                     eattr = (str(ele) + attr).replace("\n", "\nDEBUG:  ")
                     print("DEBUG:  [" + str(i) + "]=" + str(eattr))
             elif isinstance(message, dict):
-                for k, val in message.items():
-                    attr = ""
-                    if hasattr(val, "anchor") and val.anchor.value is not None:
-                        attr = "; &" + val.anchor.value
-                    vattr = (str(val) + attr).replace("\n", "\nDEBUG:  ")
-                    print("DEBUG:  [" + str(k) + "]=>" + str(vattr))
+                for key, val in message.items():
+                    key_anchor = (
+                        key.anchor.value if hasattr(key, "anchor") else None
+                    )
+                    val_anchor = (
+                        val.anchor.value if hasattr(val, "anchor") else None
+                    )
+                    line_out = "DEBUG:  [" + str(key)
+                    if key_anchor:
+                        line_out += "; &" + str(key_anchor)
+                    line_out += "]=>" + str(val).replace("\n", "\nDEBUG:  ")
+                    if val_anchor:
+                        line_out += "; &" + str(val_anchor)
+                    print(line_out)
             else:
                 attr = ""
                 if (

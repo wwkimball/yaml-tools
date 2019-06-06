@@ -14,7 +14,7 @@ script:
   - pip install -e .
   - mypy yamlpath
   - pylint yamlpath
-  - pytest --verbose --cov=yamlpath --cov-report=term-missing --cov-fail-under=98 tests
+  - pytest --verbose --cov=yamlpath --cov-report=term-missing --cov-fail-under=100 --script-launch-mode=subprocess tests
   - coveralls
 
 deploy:

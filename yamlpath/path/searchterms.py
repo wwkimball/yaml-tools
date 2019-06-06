@@ -16,6 +16,27 @@ class SearchTerms:
         self._attribute: str = attribute
         self._term: str = term
 
+    # While this works in Python 3.7.3, it does not work in Python 3.6.3.  In
+    # the older Python, this code creates a cyclic ImportError.  Because this
+    # works in newer Pythons, I'm leaving this code here but commented-out
+    # should I ever decide to stop supporting older Pythons.  Until then, I'm
+    # moving this code to a neutral helper function that'll import both
+    # SearchTerms and PathAttributes, thus neutering this nonsense.
+    # @classmethod
+    # def from_path_segment_attrs(
+    #         cls: Type,
+    #         rhs: "pathattributes.PathAttributes") -> "SearchTerms":
+    #     """
+    #     Generates a new SearchTerms instance by copying SearchTerms
+    #     attributes from a YAML Path segment's attributes.
+    #     """
+    #     if isinstance(rhs, SearchTerms):
+    #         newinst: SearchTerms = cls(
+    #             rhs.inverted, rhs.method, rhs.attribute, rhs.term
+    #         )
+    #         return newinst
+    #     raise AttributeError
+
     def __str__(self) -> str:
         if self.method == PathSearchMethods.REGEX:
             safe_term = "/{}/".format(self.term.replace("/", r"\/"))

@@ -20,7 +20,7 @@ class Test_yaml_get():
     def test_bad_input_file(self, script_runner):
         result = script_runner.run(self.command, "--query='/test'", "no-such-file")
         assert not result.success, result.stderr
-        assert "YAML_FILE not found:" in result.stderr
+        assert "File not found:" in result.stderr
 
     def test_no_query(self, script_runner, tmp_path_factory):
         content = """---

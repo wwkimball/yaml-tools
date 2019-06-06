@@ -1,6 +1,7 @@
 """Make all the YAML Path enumerations available."""
-from .yamlvalueformats import YAMLValueFormats
-from .pathsegmenttypes import PathSegmentTypes
-from .pathsearchmethods import PathSearchMethods
-from .pathseperators import PathSeperators
+from .anchormatches import AnchorMatches
 from .collectoroperators import CollectorOperators
+from .pathsearchmethods import PathSearchMethods
+from .pathsegmenttypes import PathSegmentTypes
+from .pathseperators import PathSeperators
+from .yamlvalueformats import YAMLValueFormats

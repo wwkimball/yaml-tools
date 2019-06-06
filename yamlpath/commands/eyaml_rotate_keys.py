@@ -9,21 +9,18 @@ from shutil import copy2
 from os import remove, access, R_OK
 from os.path import isfile, exists
 
-from ruamel.yaml.parser import ParserError
-from ruamel.yaml.composer import ComposerError
-from ruamel.yaml.scanner import ScannerError
 from ruamel.yaml.scalarstring import FoldedScalarString
 
+from yamlpath.func import get_yaml_data, get_yaml_editor
 from yamlpath.eyaml.exceptions import EYAMLCommandException
 from yamlpath.eyaml import EYAMLProcessor
 
 # pylint: disable=locally-disabled,unused-import
 import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
-from yamlpath.func import get_yaml_editor
 
 # Implied Constants
-MY_VERSION = "1.0.2"
+MY_VERSION = "1.0.3"
 
 def processcli():
     """Process command-line arguments."""
@@ -125,22 +122,9 @@ def main():
             log.info("Processing {}...".format(yaml_file))
 
         # Try to open the file
-        try:
-            with open(yaml_file, 'r') as fhnd:
-                yaml_data = yaml.load(fhnd)
-        except ParserError as ex:
-            log.error("YAML parsing error {}:  {}"
-                      .format(str(ex.problem_mark).lstrip(), ex.problem))
-            exit_state = 3
-            continue
-        except ComposerError as ex:
-            log.error("YAML composition error {}:  {}"
-                      .format(str(ex.problem_mark).lstrip(), ex.problem))
-            exit_state = 3
-            continue
-        except ScannerError as ex:
-            log.error("YAML syntax error {}:  {}"
-                      .format(str(ex.problem_mark).lstrip(), ex.problem))
+        yaml_data = get_yaml_data(yaml, log, yaml_file)
+        if yaml_data is None:
+            # An error message has already been logged
             exit_state = 3
             continue
 

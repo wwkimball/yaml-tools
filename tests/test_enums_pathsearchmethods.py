@@ -19,3 +19,18 @@ class Test_enums_PathSearchMethods():
 	])
 	def test_str(self, input, output):
 		assert output == str(input)
+
+	@pytest.mark.parametrize("input,result", [
+		("!", False),
+		("%", True),
+		("$", True),
+		("=", True),
+		("^", True),
+		(">", True),
+		("<", True),
+		(">=", True),
+		("<=", True),
+		("=~", True),
+	])
+	def test_is_operator(self, input, result):
+		assert result == PathSearchMethods.is_operator(input)

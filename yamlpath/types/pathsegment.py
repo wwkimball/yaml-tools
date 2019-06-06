@@ -1,8 +1,7 @@
 """Defines a custom type for YAML Path segments."""
-from typing import Tuple, Union
+from typing import Tuple
 
-from yamlpath.path import SearchTerms, CollectorTerms
 from yamlpath.enums import PathSegmentTypes
+from yamlpath.types import PathAttributes
 
-
-PathSegment = Tuple[PathSegmentTypes, Union[str, CollectorTerms, SearchTerms]]
+PathSegment = Tuple[PathSegmentTypes, PathAttributes]

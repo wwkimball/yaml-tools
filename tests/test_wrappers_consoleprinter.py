@@ -52,19 +52,28 @@ class Test_wrappers_ConsolePrinter():
     def test_debug_noisy(self, capsys):
         args = SimpleNamespace(verbose=False, quiet=False, debug=True)
         logger = ConsolePrinter(args)
-        anchoredval = PlainScalarString("Test", anchor="Anchor")
+        anchoredkey = PlainScalarString("TestKey", anchor="KeyAnchor")
+        anchoredval = PlainScalarString("TestVal", anchor="Anchor")
 
         logger.debug(anchoredval)
         console = capsys.readouterr()
-        assert console.out == "DEBUG:  Test; &Anchor\n"
+        assert "\n".join([
+            "DEBUG:  TestVal; &Anchor",
+        ]) + "\n" == console.out
 
         logger.debug(["test", anchoredval])
         console = capsys.readouterr()
-        assert console.out == "DEBUG:  [0]=test\nDEBUG:  [1]=Test; &Anchor\n"
+        assert "\n".join([
+            "DEBUG:  [0]=test",
+            "DEBUG:  [1]=TestVal; &Anchor",
+        ]) + "\n" == console.out
 
-        logger.debug({"ichi": 1, "test": anchoredval})
+        logger.debug({"ichi": 1, anchoredkey: anchoredval})
         console = capsys.readouterr()
-        assert console.out == "DEBUG:  [ichi]=>1\nDEBUG:  [test]=>Test; &Anchor\n"
+        assert "\n".join([
+            "DEBUG:  [ichi]=>1",
+            "DEBUG:  [TestKey; &KeyAnchor]=>TestVal; &Anchor",
+        ]) + "\n" == console.out
 
     def test_debug_quiet(self, capsys):
         args = SimpleNamespace(verbose=False, quiet=True, debug=True)

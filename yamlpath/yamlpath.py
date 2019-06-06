@@ -6,6 +6,7 @@ Copyright 2019 William W. Kimball, Jr. MBA MSIS
 from collections import deque
 from typing import Deque, List, Optional, Union
 
+from yamlpath.types import PathSegment
 from yamlpath.enums import (
     PathSegmentTypes,
     PathSearchMethods,
@@ -13,7 +14,6 @@ from yamlpath.enums import (
     CollectorOperators,
 )
 from yamlpath.path import SearchTerms, CollectorTerms
-from yamlpath.types import PathSegment
 
 
 class YAMLPath:
@@ -53,6 +53,8 @@ class YAMLPath:
             self.original = yaml_path
 
     def __str__(self) -> str:
+        from yamlpath.func import ensure_escaped
+
         if self._stringified:
             return self._stringified
 
@@ -70,12 +72,12 @@ class YAMLPath:
                 if add_sep:
                     ppath += pathsep
 
-                ppath += (
-                    str(segment_attrs)
-                    .replace(pathsep, "\\{}".format(pathsep))
-                    .replace("&", r"\&")
-                    .replace("[", r"\[")
-                    .replace("]", r"\]")
+                # Replace a subset of special characters to alert users to
+                # potentially unintentional demarcation.
+                ppath += ensure_escaped(
+                    str(segment_attrs),
+                    pathsep,
+                    '(', ')', '[', ']', '^', '$', '%', ' ', "'", '"'
                 )
             elif segment_type == PathSegmentTypes.INDEX:
                 ppath += "[{}]".format(segment_attrs)
@@ -536,6 +538,7 @@ class YAMLPath:
                         raise YAMLPathException(
                             "Not an integer index:  {}".format(segment_id)
                             , yaml_path
+                            , segment_id
                         )
                     path_segments.append((segment_type, idx))
                 elif (

@@ -3,15 +3,15 @@ YAML Path processor based on ruamel.yaml.
 
 Copyright 2018, 2019 William W. Kimball, Jr. MBA MSIS
 """
-import re
 from typing import Any, Generator, List, Union
 
 from ruamel.yaml.comments import CommentedSeq, CommentedMap
 
 from yamlpath.func import (
-    build_next_node,
     append_list_element,
+    build_next_node,
     make_new_node,
+    search_matches,
 )
 from yamlpath import YAMLPath
 from yamlpath.path import SearchTerms, CollectorTerms
@@ -20,7 +20,6 @@ from yamlpath.exceptions import YAMLPathException
 from yamlpath.enums import (
     YAMLValueFormats,
     PathSegmentTypes,
-    PathSearchMethods,
     CollectorOperators,
     PathSeperators,
 )
@@ -368,7 +367,6 @@ class Processor:
                       and stripped_attrs == val.anchor.value):
                     yield val
 
-    # pylint: disable=locally-disabled,too-many-statements
     def _get_nodes_by_search(self, data: Any,
                              terms: SearchTerms) -> Generator[Any, None, None]:
         """
@@ -383,95 +381,6 @@ class Processor:
 
         Raises:  N/A
         """
-        def search_matches(method: PathSearchMethods, needle: str,
-                           haystack: Any) -> bool:
-            self.logger.debug(
-                ("Processor::_search::search_matches:  Searching for {}{}"
-                 + " using {} against {}:"
-                ).format(type(needle), needle, method, type(haystack))
-            )
-            self.logger.debug(haystack)
-            matches: bool = False
-
-            if method is PathSearchMethods.EQUALS:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack == int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack == float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack == needle
-            elif method is PathSearchMethods.STARTS_WITH:
-                matches = str(haystack).startswith(needle)
-            elif method is PathSearchMethods.ENDS_WITH:
-                matches = str(haystack).endswith(needle)
-            elif method is PathSearchMethods.CONTAINS:
-                matches = needle in str(haystack)
-            elif method is PathSearchMethods.GREATER_THAN:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack > int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack > float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack > needle
-            elif method is PathSearchMethods.LESS_THAN:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack < int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack < float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack < needle
-            elif method is PathSearchMethods.GREATER_THAN_OR_EQUAL:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack >= int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack >= float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack >= needle
-            elif method is PathSearchMethods.LESS_THAN_OR_EQUAL:
-                if isinstance(haystack, int):
-                    try:
-                        matches = haystack <= int(needle)
-                    except ValueError:
-                        matches = False
-                elif isinstance(haystack, float):
-                    try:
-                        matches = haystack <= float(needle)
-                    except ValueError:
-                        matches = False
-                else:
-                    matches = haystack <= needle
-            elif method == PathSearchMethods.REGEX:
-                matcher = re.compile(needle)
-                matches = matcher.search(str(haystack)) is not None
-            else:
-                raise NotImplementedError
-
-            return matches
-
         self.logger.debug(
             ("Processor::_get_nodes_by_search:  Seeking SEARCH nodes matching"
              + " {}.")
@@ -653,6 +562,7 @@ class Processor:
 
             yield data
 
+    # pylint: disable=locally-disabled,too-many-statements
     def _get_optional_nodes(self, data: Any, yaml_path: YAMLPath,
                             value: Any = None,
                             depth: int = 0) -> Generator[Any, None, None]:

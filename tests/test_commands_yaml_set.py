@@ -25,7 +25,7 @@ class Test_yaml_set():
     def test_bad_yaml_file(self, script_runner):
         result = script_runner.run(self.command, "--change='/test'", "--random=1", "no-such-file")
         assert not result.success, result.stderr
-        assert "YAML_FILE not found:" in result.stderr
+        assert "File not found:" in result.stderr
 
     def test_identical_saveto_change_error(self, script_runner):
         result = script_runner.run(self.command, "--change='/test'", "--random=1", "--saveto='/test'", "no-such-file")

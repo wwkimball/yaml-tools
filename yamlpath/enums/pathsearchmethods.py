@@ -4,6 +4,7 @@ Implements the PathSearchMethods enumeration.
 Copyright 2019 William W. Kimball, Jr. MBA MSIS
 """
 from enum import Enum, auto
+from typing import List
 
 
 class PathSearchMethods(Enum):
@@ -69,3 +70,17 @@ class PathSearchMethods(Enum):
             operator = '=~'
 
         return operator
+
+    @staticmethod
+    def get_operators() -> List[str]:
+        """
+        Returns the full list of suppoerted symbolic search operators.
+        """
+        return [str(o) for o in PathSearchMethods]
+
+    @staticmethod
+    def is_operator(symbol: str) -> bool:
+        """
+        Indicates whether a given symbol is a known search method operator.
+        """
+        return symbol in PathSearchMethods.get_operators()

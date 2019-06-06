@@ -271,7 +271,7 @@ Path.  For some use-case examples of these tools,
 
 The supplied command-line tools include:
 
-* [eyaml-rotate-keys](bin/eyaml-rotate-keys)
+* [eyaml-rotate-keys](yamlpath/commands/eyaml_rotate_keys.py)
 
 ```text
 usage: eyaml-rotate-keys [-h] [-V] [-d | -v | -q] [-b] [-x EYAML]
@@ -312,10 +312,11 @@ Any YAML_FILEs lacking EYAML values will not be modified (or backed up, even
 when -b/--backup is specified).
 ```
 
-* [yaml-get](bin/yaml-get)
+* [yaml-get](yamlpath/commands/yaml_get.py)
 
 ```text
-usage: yaml-get [-h] [-V] -p YAML_PATH [-t {auto,dot,fslash}] [-x EYAML]
+usage: yaml-get [-h] [-V] -p YAML_PATH
+                [-t ['.', '/', 'auto', 'dot', 'fslash']] [-x EYAML]
                 [-r PRIVATEKEY] [-u PUBLICKEY] [-d | -v | -q]
                 YAML_FILE
 
@@ -330,8 +331,9 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -V, --version         show program's version number and exit
-  -t {auto,dot,fslash}, --pathsep {auto,dot,fslash}
-                        force the separator in YAML_PATH when inference fails
+  -t ['.', '/', 'auto', 'dot', 'fslash'], --pathsep ['.', '/', 'auto', 'dot', 'fslash']
+                        indicate which YAML Path seperator to use when
+                        rendering results; default=dot
   -d, --debug           output debugging details
   -v, --verbose         increase output verbosity
   -q, --quiet           suppress all output except errors
@@ -356,13 +358,83 @@ For more information about YAML Paths, please visit
 https://github.com/wwkimball/yamlpath.
 ```
 
-* [yaml-set](bin/yaml-set)
+* [yaml-paths](yamlpath/commands/yaml_paths.py)
+
+```text
+usage: yaml-paths [-h] [-V] -s EXPRESSION [-c EXPRESSION] [-d | -v | -q] [-p]
+                  [-t ['.', '/', 'auto', 'dot', 'fslash']] [-a] [-i | -k | -n]
+                  [-o | -l] [-e] [-x EYAML] [-r PRIVATEKEY] [-u PUBLICKEY]
+                  YAML_FILE [YAML_FILE ...]
+
+Returns zero or more YAML Paths indicating where in given YAML/Compatible data
+one or more search expressions match. Values, keys, and/or anchors can be
+searched. EYAML can be employed to search encrypted values.
+
+positional arguments:
+  YAML_FILE             one or more YAML files to search
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -V, --version         show program's version number and exit
+  -c EXPRESSION, --except EXPRESSION
+                        except results matching this search expression; can be
+                        set more than once
+  -d, --debug           output debugging details
+  -v, --verbose         increase output verbosity
+  -q, --quiet           suppress all non-result output except errors
+  -p, --pathonly        print results without any search expression decorators
+  -t ['.', '/', 'auto', 'dot', 'fslash'], --pathsep ['.', '/', 'auto', 'dot', 'fslash']
+                        indicate which YAML Path seperator to use when
+                        rendering results; default=dot
+  -a, --anchors         search anchor names
+
+required settings:
+  -s EXPRESSION, --search EXPRESSION
+                        the search expression; can be set more than once
+
+Key name searching options:
+  -i, --ignorekeynames  (default) do not search key names
+  -k, --keynames        search key names in addition to values and array
+                        elements
+  -n, --onlykeynames    only search key names (ignore all values and array
+                        elements)
+
+Duplicate alias options:
+  An 'anchor' is an original, reusable key or value. An 'alias' is a copy of
+  an 'anchor'. These options specify how to handle this duplication.
+
+  -o, --originals       (default) include only the original anchor in matching
+                        results
+  -l, --duplicates      include anchor and duplicate aliases in results
+
+EYAML options:
+  Left unset, the EYAML keys will default to your system or user defaults.
+  Both keys must be set either here or in your system or user EYAML
+  configuration file when using EYAML.
+
+  -e, --decrypt         decrypt EYAML values in order to search them
+                        (otherwise, search the encrypted blob)
+  -x EYAML, --eyaml EYAML
+                        the eyaml binary to use when it isn't on the PATH
+  -r PRIVATEKEY, --privatekey PRIVATEKEY
+                        EYAML private key
+  -u PUBLICKEY, --publickey PUBLICKEY
+                        EYAML public key
+
+A search or exception EXPRESSION takes the form of a YAML Path search operator
+-- %, $, =, ^, >, <, >=, <=, =~, or ! -- followed by the search term, omitting
+the left-hand operand. For more information about YAML Paths, please visit
+https://github.com/wwkimball/yamlpath.
+```
+
+* [yaml-set](yamlpath/commands/yaml_set.py)
 
 ```text
 usage: yaml-set [-h] [-V] -g YAML_PATH [-a VALUE | -f FILE | -i | -R LENGTH]
                 [-F {bare,boolean,default,dquote,float,folded,int,literal,squote}]
-                [-c CHECK] [-s YAML_PATH] [-m] [-b] [-t {auto,dot,fslash}]
-                [-e] [-x EYAML] [-r PRIVATEKEY] [-u PUBLICKEY] [-d | -v | -q]
+                [-c CHECK] [-s YAML_PATH] [-m] [-b]
+                [-t ['.', '/', 'auto', 'dot', 'fslash']] [-e] [-x EYAML]
+                [-r PRIVATEKEY] [-u PUBLICKEY] [-d | -v | -q]
                 YAML_FILE
 
 Changes one or more values in a YAML file at a specified YAML Path. Matched
@@ -388,8 +460,9 @@ optional arguments:
                         YAML_FILE
   -b, --backup          save a backup YAML_FILE with an extra .bak file-
                         extension
-  -t {auto,dot,fslash}, --pathsep {auto,dot,fslash}
-                        force the separator in YAML_PATH when inference fails
+  -t ['.', '/', 'auto', 'dot', 'fslash'], --pathsep ['.', '/', 'auto', 'dot', 'fslash']
+                        indicate which YAML Path seperator to use when
+                        rendering results; default=dot
   -d, --debug           output debugging details
   -v, --verbose         increase output verbosity
   -q, --quiet           suppress all output except errors
@@ -411,8 +484,8 @@ input options:
 
 EYAML options:
   Left unset, the EYAML keys will default to your system or user defaults.
-  Both keys must be set either here or in your system or user EYAML
-  configuration file when using EYAML.
+  You do not need to supply a private key unless you enable --check and the
+  old value is encrypted.
 
   -e, --eyamlcrypt      encrypt the new value using EYAML
   -x EYAML, --eyaml EYAML
@@ -475,6 +548,26 @@ At its simplest:
 yaml-get \
   --query=see.documentation.above.for.many.samples \
   my_yaml_file.yaml
+```
+
+#### Search For YAML Paths
+
+Simplest use:
+
+```shell
+yaml-paths \
+  --search=%word \
+  /some/directory/*.yaml
+```
+
+Expand and exclude unwanted results:
+
+```shell
+yaml-paths \
+  --search=^another \
+  --search=$word \
+  --except=%bad \
+  /some/directory/*.yaml
 ```
 
 #### Change a YAML Value
@@ -596,6 +689,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
 
 import yamlpath.patches
+from yamlpath.func import get_yaml_data, get_yaml_editor
 from yamlpath.wrappers import ConsolePrinter
 from yamlpath import Processor
 
@@ -604,20 +698,15 @@ args = processcli()
 log = ConsolePrinter(args)
 
 # Prep the YAML parser and round-trip editor (tweak to your needs)
-yaml = YAML()
-yaml.indent(mapping=2, sequence=4, offset=2)
-yaml.explicit_start = True
-yaml.preserve_quotes = True
-yaml.width = sys.maxsize
+yaml = get_yaml_editor()
 
 # At this point, you'd load or parse your YAML file, stream, or string.  When
 # loading from file, I typically follow this pattern:
-try:
-    with open(args.yaml_file, 'r') as f:
-        yaml_data = yaml.load(f)
-except ParserError as e:
-    log.error("YAML parsing error {}:  {}"
-        .format(str(e.problem_mark).lstrip(), e.problem))
+yaml_data = get_yaml_data(yaml, log, yaml_file)
+if yaml_data is None:
+    # There was an issue loading the file; an error message has already been
+    # printed.
+    exit(1)
 
 # Pass the log writer and parsed YAML data to the YAMLPath processor
 processor = Processor(log, yaml_data)

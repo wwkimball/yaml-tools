@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="yamlpath",
-    version="2.0.2",
+    version="2.1.0",
     description="Read and change YAML/Compatible data using powerful, intuitive, command-line friendly syntax",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -13,6 +13,7 @@ setuptools.setup(
         "Development Status :: 4 - Beta",
         "License :: OSI Approved :: ISC License (ISCL)",
         "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
         "Operating System :: OS Independent",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
@@ -26,6 +27,7 @@ setuptools.setup(
         "console_scripts": [
             "eyaml-rotate-keys = yamlpath.commands.eyaml_rotate_keys:main",
             "yaml-get = yamlpath.commands.yaml_get:main",
+            "yaml-paths = yamlpath.commands.yaml_paths:main",
             "yaml-set = yamlpath.commands.yaml_set:main",
         ]
     },
