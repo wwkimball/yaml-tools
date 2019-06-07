@@ -558,3 +558,20 @@ class Test_yaml_paths():
             "/aliases[&doesMatch]",
             "/also_matches",
         ]) + "\n" == result.stdout
+
+    def test_dedupe_results(self, script_runner, tmp_path_factory):
+        content = """---
+        key: value
+        """
+        yaml_file = create_temp_yaml_file(tmp_path_factory, content)
+        result = script_runner.run(
+            self.command,
+            "--pathsep=/", "--keynames", "--pathonly",
+            "--search", "=key",
+            "--search", "=value",
+            yaml_file
+        )
+        assert result.success, result.stderr
+        assert "\n".join([
+            "/key",
+        ]) + "\n" == result.stdout

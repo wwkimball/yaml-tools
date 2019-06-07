@@ -1,3 +1,10 @@
+2.1.1:
+Bug Fixes:
+* yaml-paths was recursing into nodes for which the name had already matched,
+  causing unnecessary search results.  Version 0.0.2 fixes this; when a node is
+  matched by name, any children are ignored because they will have already been
+  yielded as the parent node's value.
+
 2.1.0:
 Enhancements:
 * Added a new yaml-paths command-line tool.  In short, it enables searching

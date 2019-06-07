@@ -28,7 +28,7 @@ from yamlpath.wrappers import ConsolePrinter
 from yamlpath.eyaml import EYAMLProcessor
 
 # Implied Constants
-MY_VERSION = "0.0.1"
+MY_VERSION = "0.0.2"
 
 def processcli():
     """Process command-line arguments."""
@@ -332,12 +332,15 @@ def search_for_paths(logger: ConsolePrinter, processor: EYAMLProcessor,
                 # Search the name of the key, itself
                 matches = search_matches(method, term, key)
                 if (matches and not invert) or (invert and not matches):
+                    # No other matches within this node matter because they are
+                    # already in the result.
                     logger.debug(
                         ("yaml_paths::search_for_paths<dict>:"
                          + "yielding KEY name match, {}:  {}"
                         ).format(key, tmp_path)
                     )
                     yield YAMLPath(tmp_path)
+                    continue
 
             # The value may itself be anchored; search it if requested
             anchor_matched = search_anchor(val, terms, seen_anchors,
