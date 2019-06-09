@@ -362,8 +362,9 @@ https://github.com/wwkimball/yamlpath.
 
 ```text
 usage: yaml-paths [-h] [-V] -s EXPRESSION [-c EXPRESSION] [-d | -v | -q] [-p]
-                  [-t ['.', '/', 'auto', 'dot', 'fslash']] [-a] [-i | -k | -n]
-                  [-o | -l] [-e] [-x EYAML] [-r PRIVATEKEY] [-u PUBLICKEY]
+                  [-m] [-t ['.', '/', 'auto', 'dot', 'fslash']] [-i | -k | -K]
+                  [-a] [-A | -Y | -y | -l] [-e] [-x EYAML] [-r PRIVATEKEY]
+                  [-u PUBLICKEY]
                   YAML_FILE [YAML_FILE ...]
 
 Returns zero or more YAML Paths indicating where in given YAML/Compatible data
@@ -383,10 +384,13 @@ optional arguments:
   -v, --verbose         increase output verbosity
   -q, --quiet           suppress all non-result output except errors
   -p, --pathonly        print results without any search expression decorators
+  -m, --expand          expand matching parent nodes to list all permissible
+                        child leaf nodes (see "Reference handling options" for
+                        restrictions)
   -t ['.', '/', 'auto', 'dot', 'fslash'], --pathsep ['.', '/', 'auto', 'dot', 'fslash']
                         indicate which YAML Path seperator to use when
                         rendering results; default=dot
-  -a, --anchors         search anchor names
+  -a, --refnames        also search the names of &anchor and *alias references
 
 required settings:
   -s EXPRESSION, --search EXPRESSION
@@ -396,16 +400,26 @@ Key name searching options:
   -i, --ignorekeynames  (default) do not search key names
   -k, --keynames        search key names in addition to values and array
                         elements
-  -n, --onlykeynames    only search key names (ignore all values and array
+  -K, --onlykeynames    only search key names (ignore all values and array
                         elements)
 
-Duplicate alias options:
-  An 'anchor' is an original, reusable key or value. An 'alias' is a copy of
-  an 'anchor'. These options specify how to handle this duplication.
+Reference handling options:
+  Indicate how to treat anchor and alias references. An anchor is an
+  original, reusable key or value. All aliases become replaced by the
+  anchors they reference when YAML data is read. These options specify how
+  to handle this duplication of keys and values. Note that the default
+  behavior includes all aliased keys but not aliased values.
 
-  -o, --originals       (default) include only the original anchor in matching
-                        results
-  -l, --duplicates      include anchor and duplicate aliases in results
+  -A, --anchorsonly     include only original matching key and value anchors
+                        in results, discarding all aliased keys and values
+                        (including child nodes)
+  -Y, --allowkeyaliases
+                        (default) include matching key aliases, permitting
+                        search traversal into their child nodes
+  -y, --allowvaluealiases
+                        include matching value aliases (does not permit search
+                        traversal into aliased keys)
+  -l, --allowaliases    include all matching key and value aliases
 
 EYAML options:
   Left unset, the EYAML keys will default to your system or user defaults.
@@ -520,8 +534,13 @@ libraries to supplement your own work.
 
 The command-line tools are self-documented and [their documentation is captured
 above](#command-line-tools) for easy reference.  Simply pass `--help` to them in
-order to obtain the same detailed documentation.  Here are some simple examples
-of their typical use-cases.
+order to obtain the same detailed documentation.
+
+Please review [the comprehensive test_commands_*.py unit tests](/tests/) to
+explore samples of YAML files and the many ways these tools help get and set
+their data.
+
+The following are some simple examples of their typical use-cases.
 
 #### Rotate Your EYAML Keys
 
@@ -560,13 +579,23 @@ yaml-paths \
   /some/directory/*.yaml
 ```
 
-Expand and exclude unwanted results:
+Search for multiple expressions and exclude unwanted results:
 
 ```shell
 yaml-paths \
   --search=^another \
   --search=$word \
   --except=%bad \
+  /some/directory/*.yaml
+```
+
+Return all leaf nodes under matching parents (most useful when matching against Hash keys and you only want the original leaf nodes beneath them):
+
+```shell
+yaml-paths \
+  --expand \
+  --keynames \
+  --search==parent_node \
   /some/directory/*.yaml
 ```
 

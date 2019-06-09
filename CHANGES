@@ -1,3 +1,13 @@
+2.2.0:
+Bug Fixes:
+* YAML construction errors are now caught and more cleanly reported by all
+  command-line tools.
+
+Enhancements:
+* yaml-paths version 0.1.0 now has more specific flags, enabling:
+  * more precise handling of anchors in YAML data, and
+  * expanding parent node results to instead return all their child leaf nodes.
+
 2.1.1:
 Bug Fixes:
 * yaml-paths was recursing into nodes for which the name had already matched,

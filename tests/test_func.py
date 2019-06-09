@@ -89,6 +89,19 @@ class Test_func():
         captured = capsys.readouterr()
         assert -1 < captured.err.find("Duplicate YAML Anchor detected")
 
+    def test_get_yaml_data_construction_error(
+        self, capsys, quiet_logger, tmp_path_factory
+    ):
+        yp = get_yaml_editor()
+        content = """---
+        missing:
+          <<:
+        """
+        yaml_file = create_temp_yaml_file(tmp_path_factory, content)
+        assert None == get_yaml_data(yp, quiet_logger, yaml_file)
+        captured = capsys.readouterr()
+        assert -1 < captured.err.find("YAML construction error")
+
     def test_anchorless_list_element_error(self):
         with pytest.raises(ValueError) as ex:
             append_list_element({}, YAMLPath("foo"), "bar")

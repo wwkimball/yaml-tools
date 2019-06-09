@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 from ruamel.yaml import YAML
 from ruamel.yaml.parser import ParserError
 from ruamel.yaml.composer import ComposerError, ReusedAnchorWarning
-from ruamel.yaml.constructor import DuplicateKeyError
+from ruamel.yaml.constructor import ConstructorError, DuplicateKeyError
 from ruamel.yaml.scanner import ScannerError
 from ruamel.yaml.comments import CommentedSeq, CommentedMap
 from ruamel.yaml.scalarstring import (
@@ -54,6 +54,7 @@ def get_yaml_editor() -> Any:
     yaml.width = maxsize
     return yaml
 
+# pylint: disable=locally-disabled,too-many-branches
 def get_yaml_data(parser: Any, logger: ConsolePrinter, source: str) -> Any:
     """
     Attempts to parse YAML/Compatible data and return the ruamel.yaml object
@@ -82,6 +83,10 @@ def get_yaml_data(parser: Any, logger: ConsolePrinter, source: str) -> Any:
         yaml_data = None
     except ComposerError as ex:
         logger.error("YAML composition error {}:  {}"
+                     .format(str(ex.problem_mark).lstrip(), ex.problem))
+        yaml_data = None
+    except ConstructorError as ex:
+        logger.error("YAML construction error {}:  {}"
                      .format(str(ex.problem_mark).lstrip(), ex.problem))
         yaml_data = None
     except ScannerError as ex:
