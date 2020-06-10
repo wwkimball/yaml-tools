@@ -107,6 +107,20 @@ class Test_func():
             append_list_element({}, YAMLPath("foo"), "bar")
         assert -1 < str(ex.value).find("Impossible to add an Anchor")
 
+    def test_unicode_decode_error(
+        self, capsys, quiet_logger, tmp_path_factory
+    ):
+        yp = get_yaml_editor()
+        content = """---
+key: |-
+  çeno▒
+  Þaz
+        """
+        yaml_file = create_temp_yaml_file(tmp_path_factory, content)
+        assert None == get_yaml_data(yp, quiet_logger, yaml_file)
+        captured = capsys.readouterr()
+        assert -1 < captured.err.find("Unicode parser was unable to read")
+
     @pytest.mark.parametrize("value,checktype", [
         ([], CommentedSeq),
         ({}, CommentedMap),

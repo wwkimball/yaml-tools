@@ -14,6 +14,8 @@ import tempfile
 import argparse
 import secrets
 import string
+import re
+import codecs
 from os import remove, access, R_OK
 from os.path import isfile, exists
 from shutil import copy2, copyfileobj
@@ -31,7 +33,15 @@ import yamlpath.patches
 from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
-MY_VERSION = "1.0.7"
+MY_VERSION = "1.1.0"
+ESCAPE_SEQUENCE_RE = re.compile(r'''
+    ( \\U........      # 8-digit hex escapes
+    | \\u....          # 4-digit hex escapes
+    | \\x..            # 2-digit hex escapes
+    | \\[0-7]{1,3}     # Octal escapes
+    | \\N\{[^}]+\}     # Unicode characters by name
+    | \\[\\'"abfnrtv]  # Single-character escapes
+    )''', re.UNICODE | re.VERBOSE)
 
 def processcli():
     """Process command-line arguments."""
@@ -80,6 +90,14 @@ def processcli():
         choices=[l.lower() for l in YAMLValueFormats.get_names()],
         type=str.lower,
         help="override automatic formatting of the new value")
+    parser.add_argument(
+        "-C", "--codec",
+        type=str.lower,
+        help="when set, decode character escape sequences within the new value\
+              into their actual characters (convert \\n into new-lines,\
+              \\xNN into their hexadecimal values, \\uNNNN into their Unicode\
+              characers, and so on); in most cases, you probably want\
+              unicode-escape")
     parser.add_argument(
         "-c", "--check",
         help="check the value before replacing it")
@@ -176,6 +194,13 @@ def validateargs(args, log):
     if has_errors:
         sys.exit(1)
 
+# Credit: https://stackoverflow.com/a/24519338/5880190
+def decode_escapes(value, codec):
+    def decode_match(match):
+        return codecs.decode(match.group(0), codec)
+
+    return ESCAPE_SEQUENCE_RE.sub(decode_match, value)
+
 # pylint: disable=locally-disabled,too-many-locals,too-many-branches,too-many-statements
 def main():
     """Main code."""
@@ -199,6 +224,14 @@ def main():
                 string.ascii_uppercase + string.ascii_lowercase + string.digits
             ) for _ in range(args.random)
         )
+
+    # Decode the new value whenever a codec has been supplied
+    if args.codec:
+        try:
+            new_value = decode_escapes(new_value, args.codec)
+        except UnicodeDecodeError as ude:
+            log.critical("Specified codec is unable to decode your value due"
+                         + " to error: {}.".format(ude), 1)
 
     # Prep the YAML parser
     yaml = get_yaml_editor()
@@ -343,21 +376,34 @@ def main():
         with open(args.yaml_file, 'w') as yaml_dump:
             try:
                 yaml.dump(yaml_data, yaml_dump)
+            except UnicodeEncodeError as ex:
+                rollback_changes(yaml_dump, tmphnd, args, backup_file)
+                log.debug("Assertion error: {}".format(ex))
+                log.critical((
+                    "Unicode encoding error encountered while attempting to"
+                    + " write updated data to {}.  You may need to specify a"
+                    + " codec, a different codec, or compatible values for the"
+                    + " specified codec.  The original file content was"
+                    + " restored.  The Unicode error was as follows: {}"
+                ).format(args.yaml_file, ex), 3)
             except AssertionError as ex:
-                yaml_dump.close()
-                tmphnd.seek(0)
-                with open(args.yaml_file, 'wb') as outhnd:
-                    copyfileobj(tmphnd, outhnd)
-
-                # No sense in preserving a backup file with no changes
-                if args.backup:
-                    remove(backup_file)
-
+                rollback_changes(yaml_dump, tmphnd, args, backup_file)
                 log.debug("Assertion error: {}".format(ex))
                 log.critical((
                     "Indeterminate assertion error encountered while"
                     + " attempting to write updated data to {}.  The original"
                     + " file content was restored.").format(args.yaml_file), 3)
+
+def rollback_changes(outhnd, tmphnd, args, backup_file):
+    """Rollback changes to the target output file."""
+    outhnd.close()
+    tmphnd.seek(0)
+    with open(args.yaml_file, 'wb') as rollbackhnd:
+        copyfileobj(tmphnd, rollbackhnd)
+
+    # No sense in preserving a backup file with no changes
+    if args.backup:
+        remove(backup_file)
 
 if __name__ == "__main__":
     main()  # pragma: no cover

@@ -127,6 +127,10 @@ def get_yaml_data(parser: Any, logger: ConsolePrinter, source: str) -> Any:
                          .replace("occurrence   ", "occurrence ")
                          .replace("\n", "\n   ")))
         yaml_data = None
+    except UnicodeDecodeError as ude:
+        logger.error("The Unicode parser was unable to read the data due to"
+                     + " error: {}".format(ude))
+        yaml_data = None
 
     return yaml_data
 
