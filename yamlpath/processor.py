@@ -137,6 +137,7 @@ class Processor:
         value_format: YAMLValueFormats = kwargs.pop("value_format",
                                                     YAMLValueFormats.DEFAULT)
         pathsep: PathSeperators = kwargs.pop("pathsep", PathSeperators.AUTO)
+        encoding: str = kwargs.pop("encoding", None)
 
         if isinstance(yaml_path, str):
             yaml_path = YAMLPath(yaml_path, pathsep)
@@ -154,7 +155,8 @@ class Processor:
             ):
                 found_nodes += 1
                 self._update_node(
-                    req_node.parent, req_node.parentref, value, value_format)
+                    req_node.parent, req_node.parentref, value, value_format,
+                    encoding)
 
             if found_nodes < 1:
                 raise YAMLPathException(
@@ -175,7 +177,7 @@ class Processor:
                 )
                 self._update_node(
                     node_coord.parent, node_coord.parentref, value,
-                    value_format)
+                    value_format, encoding)
 
     # pylint: disable=locally-disabled,too-many-branches,too-many-arguments
     def _get_nodes_by_path_segment(self, data: Any,
@@ -836,7 +838,7 @@ class Processor:
             yield NodeCoords(data, parent, parentref)
 
     def _update_node(self, parent: Any, parentref: Any, value: Any,
-                     value_format: YAMLValueFormats) -> None:
+                     value_format: YAMLValueFormats, encoding: str) -> None:
         """
         Set the value of a data node.
 
@@ -883,5 +885,5 @@ class Processor:
                                 replacement_node)
 
         change_node = parent[parentref]
-        new_node = make_new_node(change_node, value, value_format)
+        new_node = make_new_node(change_node, value, value_format, encoding)
         recurse(self.data, parent, parentref, change_node, new_node)

@@ -6,6 +6,7 @@ Copyright 2018, 2019, 2020 William W. Kimball, Jr. MBA MSIS
 import warnings
 import ast
 import re
+import codecs
 from sys import maxsize
 from distutils.util import strtobool
 from typing import Any, List, Optional
@@ -38,6 +39,22 @@ from yamlpath.wrappers import ConsolePrinter, NodeCoords
 from yamlpath.types import PathAttributes
 from yamlpath.path import SearchTerms
 from yamlpath import YAMLPath
+
+ESCAPE_SEQUENCE_RE = re.compile(r'''
+    ( \\U........      # 8-digit hex escapes
+    | \\u....          # 4-digit hex escapes
+    | \\x..            # 2-digit hex escapes
+    | \\[0-7]{1,3}     # Octal escapes
+    | \\N\{[^}]+\}     # Unicode characters by name
+    | \\[\\'"abfnrtv]  # Single-character escapes
+    )''', re.UNICODE | re.VERBOSE)
+
+# Credit: https://stackoverflow.com/a/24519338/5880190
+def decode_escapes(value, codec):
+    def decode_match(match):
+        return codecs.decode(match.group(0), codec)
+
+    return ESCAPE_SEQUENCE_RE.sub(decode_match, value)
 
 def get_yaml_editor() -> Any:
     """
@@ -270,7 +287,7 @@ def clone_node(node: Any) -> Any:
 
 # pylint: disable=locally-disabled,too-many-branches,too-many-statements
 def make_new_node(source_node: Any, value: Any,
-                  value_format: YAMLValueFormats) -> Any:
+                  value_format: YAMLValueFormats, encoding: str) -> Any:
     """
     Create a new data node based on a sample node.
 
@@ -312,19 +329,34 @@ def make_new_node(source_node: Any, value: Any,
 
     if valform == YAMLValueFormats.BARE:
         new_type = PlainScalarString
-        new_value = str(value)
+        if encoding:
+            new_value = decode_escapes(value, encoding)
+        else:
+            new_value = str(value)
     elif valform == YAMLValueFormats.DQUOTE:
         new_type = DoubleQuotedScalarString
-        new_value = str(value)
+        if encoding:
+            new_value = decode_escapes(value, encoding)
+        else:
+            new_value = str(value)
     elif valform == YAMLValueFormats.SQUOTE:
         new_type = SingleQuotedScalarString
-        new_value = str(value)
+        if encoding:
+            new_value = decode_escapes(value, encoding)
+        else:
+            new_value = str(value)
     elif valform == YAMLValueFormats.FOLDED:
         new_type = FoldedScalarString
-        new_value = str(value)
+        if encoding:
+            new_value = decode_escapes(value, encoding)
+        else:
+            new_value = str(value)
     elif valform == YAMLValueFormats.LITERAL:
         new_type = LiteralScalarString
-        new_value = str(value)
+        if encoding:
+            new_value = decode_escapes(value, encoding)
+        else:
+            new_value = str(value)
     elif valform == YAMLValueFormats.BOOLEAN:
         new_type = ScalarBoolean
         if isinstance(value, bool):

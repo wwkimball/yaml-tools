@@ -14,13 +14,12 @@ import tempfile
 import argparse
 import secrets
 import string
-import re
-import codecs
 from os import remove, access, R_OK
 from os.path import isfile, exists
 from shutil import copy2, copyfileobj
 
-from yamlpath.func import clone_node, get_yaml_data, get_yaml_editor
+from yamlpath.func import (clone_node, get_yaml_data, get_yaml_editor,
+                           decode_escapes)
 from yamlpath import YAMLPath
 from yamlpath.exceptions import YAMLPathException
 from yamlpath.enums import YAMLValueFormats, PathSeperators
@@ -34,14 +33,6 @@ from yamlpath.wrappers import ConsolePrinter
 
 # Implied Constants
 MY_VERSION = "1.1.0"
-ESCAPE_SEQUENCE_RE = re.compile(r'''
-    ( \\U........      # 8-digit hex escapes
-    | \\u....          # 4-digit hex escapes
-    | \\x..            # 2-digit hex escapes
-    | \\[0-7]{1,3}     # Octal escapes
-    | \\N\{[^}]+\}     # Unicode characters by name
-    | \\[\\'"abfnrtv]  # Single-character escapes
-    )''', re.UNICODE | re.VERBOSE)
 
 def processcli():
     """Process command-line arguments."""
@@ -193,13 +184,6 @@ def validateargs(args, log):
 
     if has_errors:
         sys.exit(1)
-
-# Credit: https://stackoverflow.com/a/24519338/5880190
-def decode_escapes(value, codec):
-    def decode_match(match):
-        return codecs.decode(match.group(0), codec)
-
-    return ESCAPE_SEQUENCE_RE.sub(decode_match, value)
 
 # pylint: disable=locally-disabled,too-many-locals,too-many-branches,too-many-statements
 def main():
@@ -356,7 +340,8 @@ def main():
         except EYAMLCommandException as ex:
             log.critical(ex, 2)
     else:
-        processor.set_value(change_path, new_value, value_format=args.format)
+        processor.set_value(change_path, new_value, value_format=args.format,
+                            encoding=args.codec)
 
     # Save a backup of the original file, if requested
     if args.backup:

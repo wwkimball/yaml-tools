@@ -2,10 +2,14 @@
 Enhancements:
 * Decoding codecs can now be set for new values, allowing the YAML Path
   processors to translate escaped character sequences into their real
-  characters.  This is most useful for expanding new-line characters and for
-  decoding Unicode characters where users would rather store the real character
-  rather than its escape sequence into the target YAML/Compatible file.
+  characters.  This is most useful for decoding non-ASCII characters where
+  users would rather store the real character rather than its escape sequence
+  into the target YAML/Compatible file and the value source only supplies
+  escape sequences.
   Credit:  https://stackoverflow.com/a/24519338/5880190
+  Known Python encoding codecs:
+  * https://docs.python.org/3/library/codecs.html#standard-encodings
+  * https://docs.python.org/3/library/codecs.html#python-specific-encodings
 
 2.3.5:
 Bug Fixes:
