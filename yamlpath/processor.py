@@ -150,15 +150,45 @@ class Processor:
             found_nodes: int = 0
             for req_node in self._get_required_nodes(self.data, yaml_path):
                 found_nodes += 1
-                try:
-                    self._update_node(
-                        req_node.parent, req_node.parentref, value,
-                        value_format, tag)
-                except ValueError as vex:
-                    raise YAMLPathException(
-                        "Impossible to write '{}' as {}.  The error was:  {}"
-                        .format(value, value_format, str(vex))
-                        , str(yaml_path)) from vex
+                if isinstance(req_node.node, list):
+                    for req_ele in req_node.node:
+                        self.logger.debug(
+                            "Submitting required node element for change:",
+                            prefix="Processor::set_value:  ", data=req_ele)
+                        try:
+                            if isinstance(req_ele.node, NodeCoords):
+                                self._update_node(
+                                    req_ele.node.parent,
+                                    req_ele.node.parentref,
+                                    value, value_format, tag)
+                            else:
+                                self._update_node(
+                                    req_ele.parent, req_ele.parentref, value,
+                                    value_format, tag)
+                        except ValueError as vex:
+                            raise YAMLPathException(
+                                "Impossible to write '{}' as {}.  The error"
+                                " was:  {}".format(
+                                    value, value_format, str(vex))
+                                , str(yaml_path)) from vex
+                else:
+                    self.logger.debug(
+                        "Submitting required node for change:",
+                        prefix="Processor::set_value:  ", data=req_node)
+                    try:
+                        if isinstance(req_node.node, NodeCoords):
+                            self._update_node(
+                                req_node.node.parent, req_node.node.parentref,
+                                value, value_format, tag)
+                        else:
+                            self._update_node(
+                                req_node.parent, req_node.parentref, value,
+                                value_format, tag)
+                    except ValueError as vex:
+                        raise YAMLPathException(
+                            "Impossible to write '{}' as {}.  The error was:  {}"
+                            .format(value, value_format, str(vex))
+                            , str(yaml_path)) from vex
 
             if found_nodes < 1:
                 raise YAMLPathException(
@@ -182,9 +212,14 @@ class Processor:
                     , data=value
                     , prefix="Processor::set_value:  ")
                 try:
-                    self._update_node(
-                        node_coord.parent, node_coord.parentref, value,
-                        value_format, tag)
+                    if isinstance(node_coord.node, NodeCoords):
+                        self._update_node(
+                            node_coord.node.parent, node_coord.node.parentref,
+                            value, value_format, tag)
+                    else:
+                        self._update_node(
+                            node_coord.parent, node_coord.parentref, value,
+                            value_format, tag)
                 except ValueError as vex:
                     raise YAMLPathException(
                         "Impossible to write '{}' as {}.  The error was:  {}"
@@ -984,6 +1019,34 @@ class Processor:
                 data=data, footer=" ")
             yield NodeCoords(data, parent, parentref, translated_path)
 
+    def _get_collected_nodes(
+        self, data: Any
+    ) -> Generator[NodeCoords, None, None]:
+        """Yield all nodes -- however nested -- from a Collector result."""
+        if isinstance(data, list):
+            for ele in data:
+                for node in self._get_collected_nodes(ele):
+                    self.logger.debug(
+                        "Yielding a list element:",
+                        prefix="Processor::_get_collected_nodes:  ",
+                        data=node)
+                    yield node
+        elif (isinstance(data, NodeCoords)
+              and isinstance(data.node, NodeCoords)
+        ):
+            for node in self._get_collected_nodes(data.node):
+                self.logger.debug(
+                    "Yielding a nested NodeCoords:",
+                    prefix="Processor::_get_collected_nodes:  ",
+                    data=node)
+                yield node
+        else:
+            self.logger.debug(
+                "Yielding the given data:",
+                prefix="Processor::_get_collected_nodes:  ",
+                data=data)
+            yield data
+
     # pylint: disable=locally-disabled,too-many-statements
     def _get_optional_nodes(
             self, data: Any, yaml_path: YAMLPath, value: Any = None,
@@ -1027,6 +1090,7 @@ class Processor:
         segments = yaml_path.escaped
         # pylint: disable=locally-disabled,too-many-nested-blocks
         if segments and len(segments) > depth:
+            segment_type: PathSegmentTypes
             (segment_type, unstripped_attrs) = yaml_path.unescaped[depth]
             stripped_attrs: Union[
                 str,
@@ -1048,19 +1112,41 @@ class Processor:
                 data, yaml_path, depth, parent=parent, parentref=parentref,
                 translated_path=translated_path
             ):
-                matched_nodes += 1
-                self.logger.debug(
-                    ("Processor::_get_optional_nodes:  Found element <{}>{} in"
-                     + " the data; recursing into it..."
-                    ).format(segment_type, except_segment)
-                )
-                for node_coord in self._get_optional_nodes(
-                        next_coord.node, yaml_path, value, depth + 1,
-                        parent=next_coord.parent,
-                        parentref=next_coord.parentref,
-                        translated_path=next_coord.path
-                ):
-                    yield node_coord
+                if segment_type is PathSegmentTypes.COLLECTOR:
+                    # The next_coord will be a list, not a NodeCoords
+                    self.logger.debug(
+                        "Received Collector results; sub-processing each:",
+                        prefix="Processor::_get_optional_nodes:  ",
+                        data=next_coord)
+                    matched_nodes += 1
+                    for col_node in self._get_collected_nodes(next_coord):
+                        for subnode_coord in self._get_optional_nodes(
+                                col_node, yaml_path, value, depth + 1,
+                                translated_path=translated_path):
+                            self.logger.debug(
+                                "Yielding Collector sub-node coordinate from"
+                                " {} segment:".format(segment_type),
+                                prefix="Processor::_get_optional_nodes:  ",
+                                data=subnode_coord)
+                            yield subnode_coord
+                else:
+                    matched_nodes += 1
+                    self.logger.debug(
+                        "Processor::_get_optional_nodes:  Found element <{}>{}"
+                        " in the data; recursing into it..."
+                        .format(segment_type, except_segment))
+                    for node_coord in self._get_optional_nodes(
+                            next_coord.node, yaml_path, value, depth + 1,
+                            parent=next_coord.parent,
+                            parentref=next_coord.parentref,
+                            translated_path=next_coord.path
+                    ):
+                        self.logger.debug(
+                            "Yielding recursed node coordinate from {}"
+                            " segment:".format(segment_type),
+                            prefix="Processor::_get_optional_nodes:  ",
+                            data=node_coord)
+                        yield node_coord
 
             if (
                     matched_nodes < 1
@@ -1095,6 +1181,11 @@ class Processor:
                                 translated_path=next_translated_path
                         ):
                             matched_nodes += 1
+                            self.logger.debug(
+                                "Yielding generic list node coordinate from {}"
+                                " segment:".format(segment_type),
+                                prefix="Processor::_get_optional_nodes:  ",
+                                data=node_coord)
                             yield node_coord
                     elif (
                             segment_type in [
@@ -1127,6 +1218,11 @@ class Processor:
                                 translated_path=next_translated_path
                         ):
                             matched_nodes += 1
+                            self.logger.debug(
+                                "Yielding indexed node coordinate from {}"
+                                " segment:".format(segment_type),
+                                prefix="Processor::_get_optional_nodes:  ",
+                                data=node_coord)
                             yield node_coord
                     else:
                         raise YAMLPathException(
@@ -1161,6 +1257,11 @@ class Processor:
                                 translated_path=next_translated_path
                         ):
                             matched_nodes += 1
+                            self.logger.debug(
+                                "Yielding keyed node coordinate from {}"
+                                " segment:".format(segment_type),
+                                prefix="Processor::_get_optional_nodes:  ",
+                                data=node_coord)
                             yield node_coord
                     else:
                         raise YAMLPathException(
@@ -1213,7 +1314,9 @@ class Processor:
         if parent is None:
             # Empty document or the document root
             self.logger.debug(
-                "Processor::_update_node:  Ignoring node with no parent!")
+                "Ignoring node with no parent:",
+                prefix="Processor::_update_node:  ",
+                data=value)
             return
 
         # This recurse function was contributed by Anthon van der Neut, the
