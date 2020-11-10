@@ -186,8 +186,8 @@ class Processor:
                                 value_format, tag)
                     except ValueError as vex:
                         raise YAMLPathException(
-                            "Impossible to write '{}' as {}.  The error was:  {}"
-                            .format(value, value_format, str(vex))
+                            "Impossible to write '{}' as {}.  The error was: "
+                            "  {}".format(value, value_format, str(vex))
                             , str(yaml_path)) from vex
 
             if found_nodes < 1:
