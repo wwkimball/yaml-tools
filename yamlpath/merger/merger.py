@@ -9,7 +9,7 @@ import json
 from io import StringIO
 from pathlib import Path
 
-from ruamel.yaml.comments import CommentedSeq, CommentedMap
+from ruamel.yaml.comments import CommentedSeq, CommentedMap, TaggedScalar
 
 from yamlpath.common import Anchors, Nodes, Parsers
 from yamlpath.wrappers import ConsolePrinter, NodeCoords
@@ -121,11 +121,17 @@ class Merger:
                 "Impossible to add Hash data to non-Hash destination.", path)
 
         self.logger.debug(
-            "Merging INTO dict with keys: {}:".format(", ".join(lhs.keys())),
+            "Merging INTO dict with keys: {}:".format(", ".join([
+                    str(k.value) if isinstance(k, TaggedScalar)
+                    else str(k)
+                    for k in lhs.keys()])),
             data=lhs, prefix="Merger::_merge_dicts:  ",
             header="--------------------")
         self.logger.debug(
-            "Merging FROM dict with keys: {}:".format(", ".join(rhs.keys())),
+            "Merging FROM dict with keys: {}:".format(", ".join([
+                    str(k.value) if isinstance(k, TaggedScalar)
+                    else str(k)
+                    for k in rhs.keys()])),
             data=rhs, prefix="Merger::_merge_dicts:  ",
             footer="====================")
 
@@ -183,6 +189,13 @@ class Merger:
 
                 if isinstance(val, CommentedMap):
                     lhs[key] = self._merge_dicts(lhs[key], val, path_next)
+
+                    # Synchronize any YAML Tag
+                    self.logger.debug(
+                        "Merger::_merge_dicts:  Setting LHS tag from {} to {}."
+                        .format(lhs[key].tag.value, val.tag.value))
+                    lhs[key].yaml_set_tag(val.tag.value)
+
                     self.logger.debug(
                         "Document BEFORE calling combine_merge_anchors:",
                         data=lhs, prefix="Merger::_merge_dicts:  ",
@@ -195,6 +208,12 @@ class Merger:
                 elif isinstance(val, CommentedSeq):
                     lhs[key] = self._merge_lists(
                         lhs[key], val, path_next, parent=rhs, parentref=key)
+
+                    # Synchronize any YAML Tag
+                    self.logger.debug(
+                        "Merger::_merge_dicts:  Setting LHS tag from {} to {}."
+                        .format(lhs[key].tag.value, val.tag.value))
+                    lhs[key].yaml_set_tag(val.tag.value)
                 else:
                     self.logger.debug(
                         "Merger::_merge_dicts:  Updating key, {}, at path,"
@@ -260,15 +279,33 @@ class Merger:
         if merge_mode is ArrayMergeOpts.RIGHT:
             return rhs
 
-        append_all = merge_mode is ArrayMergeOpts.ALL
+        tagless_lhs = Nodes.tagless_elements(lhs)
         for idx, ele in enumerate(rhs):
             path_next = path + "[{}]".format(idx)
             self.logger.debug(
                 "Processing element {} at {}.".format(idx, path_next),
                 prefix="Merger::_merge_simple_lists:  ", data=ele)
 
-            if append_all or (ele not in lhs):
-                lhs.append(ele)
+            if merge_mode is ArrayMergeOpts.UNIQUE:
+                cmp_val = ele
+                if isinstance(ele, TaggedScalar):
+                    cmp_val = ele.value
+
+                self.logger.debug(
+                    "Looking for comparison value, {}, in:".format(cmp_val),
+                    prefix="Merger::_merge_simple_lists:  ", data=tagless_lhs)
+
+                if cmp_val in tagless_lhs:
+                    lhs = CommentedSeq([ele
+                           if (e == cmp_val
+                               or (isinstance(e, TaggedScalar)
+                                   and e.value == cmp_val)
+                           ) else e
+                           for e in lhs])
+                else:
+                    lhs.append(ele)
+                continue
+            lhs.append(ele)
         return lhs
 
     # pylint: disable=locally-disabled,too-many-branches
@@ -325,7 +362,7 @@ class Merger:
 
             if merge_mode is AoHMergeOpts.DEEP:
                 if id_key in ele:
-                    id_val = ele[id_key]
+                    id_val = Nodes.tagless_value(ele[id_key])
                 else:
                     raise MergeException(
                         "Mandatory identity key, {}, not present in Hash with"
@@ -339,10 +376,13 @@ class Merger:
                     lhs_hash for lhs_hash in lhs
                     if isinstance(lhs_hash, CommentedMap)
                     and id_key in lhs_hash
-                    and lhs_hash[id_key] == id_val
+                    and Nodes.tagless_value(lhs_hash[id_key]) == id_val
                 ):
                     self._merge_dicts(lhs_hash, ele, path_next)
                     merged_hash = True
+
+                    # Synchronize YAML Tags
+                    lhs_hash.yaml_set_tag(ele.tag.value)
                     break
                 if not merged_hash:
                     Nodes.append_list_element(lhs, ele,
@@ -452,7 +492,19 @@ class Merger:
                 "rhs_anchor:", prefix="Merger::_resolve_anchor_conflicts:  ",
                 data=rhs_anchor)
 
-            if lhs_anchor != rhs_anchor:
+            anchors_match = True
+            lhs_is_tagged = isinstance(lhs_anchor, TaggedScalar)
+            rhs_is_tagged = isinstance(rhs_anchor, TaggedScalar)
+            if lhs_is_tagged != rhs_is_tagged:
+                anchors_match = False
+            elif lhs_is_tagged:
+                anchors_match = (
+                    (lhs_anchor.value == rhs_anchor.value)
+                    and (lhs_anchor.tag.value == rhs_anchor.tag.value))
+            else:
+                anchors_match = lhs_anchor == rhs_anchor
+
+            if not anchors_match:
                 if conflict_mode is AnchorConflictResolutions.RENAME:
                     self.logger.debug(
                         "Anchor {} conflict; will RENAME anchors."
@@ -484,8 +536,9 @@ class Merger:
                         .format(anchor))
             else:
                 self.logger.debug(
-                    "Anchor {} is symmetric; RIGHT will override to eliminate"
-                    " spurious anchor re-definition.".format(anchor))
+                    "Merger::_resolve_anchor_conflicts:  Anchor {} is"
+                    " symmetric; RIGHT will override to eliminate spurious"
+                    " anchor re-definition.".format(anchor))
                 # While the anchors are identical, the reference nodes are not.
                 # So, overwrite all matching LHS nodes with their RHS
                 # equivalents in order to stave off spurious anchor
@@ -567,11 +620,23 @@ class Merger:
                         target_node, CommentedSeq([rhs]), insert_at)
                 else:
                     self._merge_dicts(target_node, rhs, insert_at)
+
+                    # Synchronize YAML Tags
+                    self.logger.debug(
+                        "Merger::merge_with:  Setting LHS tag from {} to {}."
+                        .format(target_node.tag.value, rhs.tag.value))
+                    target_node.yaml_set_tag(rhs.tag.value)
                 merge_performed = True
             elif isinstance(rhs, CommentedSeq):
                 # The RHS document root is a list
                 self._merge_lists(target_node, rhs, insert_at)
                 merge_performed = True
+
+                # Synchronize any YAML Tag
+                self.logger.debug(
+                    "Merger::merge_with:  Setting LHS tag from {} to {}."
+                    .format(target_node.tag.value, rhs.tag.value))
+                target_node.yaml_set_tag(rhs.tag.value)
             else:
                 # The RHS document root is a Scalar value
                 target_node = node_coord.node

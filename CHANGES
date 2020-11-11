@@ -7,16 +7,18 @@ Bug Fixes:
 
 Enhancements:
 * The yaml-get command-line tool -- and the underlying Processor::get_nodes
-  method -- now retrives nodes with `null` values.  Null results from yaml-get
-  are printed using the ASCII NULL control-character (Hexadecimal 00) wherever
-  encountered.  While most terminals and shells won't visibly print this
-  character, it is there and can be picked up by downstream parsers of STDOUT.
+  method -- now retrives nodes with `null` values.  Non-JSON null results from
+  yaml-get are printed using the ASCII NULL control-character (Hexadecimal 00)
+  wherever encountered.  While most terminals and shells won't visibly print
+  this character, it is there and can be picked up by downstream parsers of
+  STDOUT.  When the output is rendered as JSON, the unquoted "null" identifier
+  is used.
 * The yaml-set command-line tool now enables assigning null values using a new
   --null|-N input option.
 * The yaml-set command-line tool now supports assigning YAML Aliases to target
   --change|-g nodes, referencing any other node via --aliasof|-A whether it is
   already Anchored, or not.  Should the Anchor not already exist, a unique name
-  will be automatically assigned.  This name can instead be set via
+  will be automatically assigned.  This automatic name can controlled via
   --anchor|-H.  Setting --change|-g and --aliasof|-A to the same node along
   with a new --anchor|-H explicitly renames an existing Anchor and its Aliases.
   The same is implicitly possible by specifying --change|-g and --anchor|-H
@@ -25,6 +27,10 @@ Enhancements:
 * With a new --tag|-T auxilliary option, the yaml-set command-line tool now
   supports assigning custom YAML tags (data-type specifiers) to nodes created
   or updated during the operation.
+* The yaml-merge and yaml-diff command-line tools now also handle YAML tags.
+* The single-star wildcard segment translation was changed from [.!=""] to
+  [.=~/.*/] which enables it to match any key or value (including empty-string
+  and null).
 
 API Changes:
 * The yamlpath.func library is too big and some very useful general code has

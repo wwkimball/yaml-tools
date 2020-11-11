@@ -951,3 +951,536 @@ a_hash:
 
         assert 0 == result.returncode, result.stderr
         assert merged_yaml_content == result.stdout
+
+    def test_tagged_value_merging(
+        self, script_runner, tmp_path_factory
+    ):
+        import subprocess
+
+        lhs_file = create_temp_yaml_file(tmp_path_factory, """---
+aliases:
+  - &anchor_keeps_tag !tagged_scalar This anchored scalar keeps its tag.
+  - &anchor_loses_tag !tagged_scalar This anchored scalar loses its tag.
+  - &anchor_gains_tag This anchored scalar gains a tag.
+  - &anchor_none_tag An anchored scalar with no tag.
+
+hash_loses_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: This value gains a tag.
+  tag_drops: !tagged_scalar This value loses its tag.
+
+hash_gains_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: This value gains a tag.
+  tag_drops: !tagged_scalar This value loses its tag.
+
+hash_none_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: This value gains a tag.
+  tag_drops: !tagged_scalar This value loses its tag.
+
+hash_keeps_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: This value gains a tag.
+  tag_drops: !tagged_scalar This value loses its tag.
+
+array_loses_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - This value gains a tag.
+  - !tagged_scalar This value loses its tag.
+
+array_gains_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - This value gains a tag.
+  - !tagged_scalar This value loses its tag.
+
+array_none_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - This value gains a tag.
+  - !tagged_scalar This value loses its tag.
+
+array_keeps_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - This value gains a tag.
+  - !tagged_scalar This value loses its tag.
+""")
+        rhs_content = """---
+aliases:
+  - &anchor_keeps_tag !tagged_scalar This anchored scalar keeps its tag.
+  - &anchor_loses_tag This anchored scalar loses its tag.
+  - &anchor_gains_tag !tagged_scalar This anchored scalar gains a tag.
+  - &anchor_none_tag An anchored scalar with no tag.
+
+hash_loses_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+
+hash_gains_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+
+hash_none_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+
+hash_keeps_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+
+array_loses_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+
+array_gains_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+
+array_none_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+
+array_keeps_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+"""
+        merged_yaml_content = """---
+aliases:
+  - &anchor_keeps_tag !tagged_scalar This anchored scalar keeps its tag.
+  - &anchor_loses_tag This anchored scalar loses its tag.
+  - &anchor_gains_tag !tagged_scalar This anchored scalar gains a tag.
+  - &anchor_none_tag An anchored scalar with no tag.
+hash_loses_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+hash_gains_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+hash_none_tag:
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+hash_keeps_tag: !hash_tag
+  keeps_tag: *anchor_keeps_tag
+  loses_tag: *anchor_loses_tag
+  gains_tag: *anchor_gains_tag
+  none_tag: *anchor_none_tag
+  tag_none: Neither gains nor loses its tag.
+  tag_keep: !tagged_scalar Keeps its tag.
+  tag_adds: !tagged_scalar This value gains a tag.
+  tag_drops: This value loses its tag.
+array_loses_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+array_gains_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+array_none_tag:
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+array_keeps_tag: !array_tag
+  - *anchor_keeps_tag
+  - *anchor_loses_tag
+  - *anchor_gains_tag
+  - *anchor_none_tag
+  - Neither gains nor loses its tag.
+  - !tagged_scalar Keeps its tag.
+  - !tagged_scalar This value gains a tag.
+  - This value loses its tag.
+"""
+
+        result = subprocess.run(
+            [self.command
+            , "--anchors=right"
+            , "--arrays=unique"
+            , lhs_file]
+            , stdout=subprocess.PIPE
+            , input=rhs_content
+            , universal_newlines=True
+        )
+
+        # DEBUG
+        # print("Expected:")
+        # print(merged_yaml_content)
+        # print("Got:")
+        # print(result.stdout)
+
+        assert 0 == result.returncode, result.stderr
+        assert merged_yaml_content == result.stdout
+
+    def test_tagged_key_merging(
+        self, script_runner, tmp_path_factory
+    ):
+        import subprocess
+
+        lhs_file = create_temp_yaml_file(tmp_path_factory, """---
+aliases:
+  - &keeps_tag !tagged keeps
+  - &loses_tag !tagged loses
+  - &gains_tag gains
+  - &never_tag never
+
+*keeps_tag : !hash_keeps
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*loses_tag : !hash_loses
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*gains_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*never_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+""")
+        rhs_content = """---
+aliases:
+  - &keeps_tag !tagged keeps
+  - &loses_tag loses
+  - &gains_tag !tagged gains
+  - &never_tag never
+
+*keeps_tag : !hash_keeps
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*loses_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*gains_tag : !hash_loses
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+
+*never_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+"""
+        merged_yaml_content = """---
+aliases:
+  - &keeps_tag !tagged keeps
+  - &loses_tag loses
+  - &gains_tag !tagged gains
+  - &never_tag never
+*keeps_tag : !hash_keeps
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+*loses_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+*gains_tag : !hash_loses
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+*never_tag :
+  *keeps_tag : *keeps_tag
+  *loses_tag : *loses_tag
+  *gains_tag : *gains_tag
+  *never_tag : *never_tag
+"""
+
+        result = subprocess.run(
+            [self.command
+            , "--anchors=right"
+            , "--arrays=unique"
+            , lhs_file]
+            , stdout=subprocess.PIPE
+            , input=rhs_content
+            , universal_newlines=True
+        )
+
+        # DEBUG
+        # print("Expected:")
+        # print(merged_yaml_content)
+        # print("Got:")
+        # print(result.stdout)
+
+        assert 0 == result.returncode, result.stderr
+        assert merged_yaml_content == result.stdout
+
+    def test_tagged_aoh_merging(
+        self, script_runner, tmp_path_factory
+    ):
+        import subprocess
+
+        lhs_file = create_temp_yaml_file(tmp_path_factory, """---
+ports:
+  - !public_record
+    id: !privileged 7
+    name: echo
+    tcp: true
+    udp: true
+  - id: 15
+    name: netstat
+    tcp: true
+    udp: false
+  - !public_record
+    id: !privileged 80
+    name: http
+    tcp: true
+    udp: true
+  - id: 113
+    name: ident
+    tcp: true
+    udp: false
+  - !inferred_record
+    id: !unprivileged 1666
+    name: perforce
+    tcp: true
+    udp: false
+  - id: 1812
+    name: radius
+    tcp: true
+    udp: true
+  - !inferred_record
+    id: !unprivileged 1813
+    name: radius-acct
+    tcp: true
+    udp: true
+  - id: 2083
+    name: radsec
+    tcp: true
+    udp: true
+""")
+        rhs_content = """---
+ports:
+  - !public_record
+    id: !privileged 7
+    name: echo
+    tcp: true
+    udp: true
+  - id: 15
+    name: netstat
+    tcp: true
+    udp: false
+  - id: 80
+    name: http
+    tcp: true
+    udp: true
+  - !public_record
+    id: !privileged 113
+    name: ident
+    tcp: true
+    udp: false
+  - !inferred_record
+    id: !unprivileged 1666
+    name: perforce
+    tcp: true
+    udp: false
+  - id: 1812
+    name: radius
+    tcp: true
+    udp: true
+  - id: 1813
+    name: radius-acct
+    tcp: true
+    udp: true
+  - !inferred_record
+    id: !unprivileged 2083
+    name: radsec
+    tcp: true
+    udp: true
+"""
+        merged_yaml_content = """---
+ports:
+  - !public_record
+    id: !privileged 7
+    name: echo
+    tcp: true
+    udp: true
+  - id: 15
+    name: netstat
+    tcp: true
+    udp: false
+  - id: 80
+    name: http
+    tcp: true
+    udp: true
+  - !public_record
+    id: !privileged 113
+    name: ident
+    tcp: true
+    udp: false
+  - !inferred_record
+    id: !unprivileged 1666
+    name: perforce
+    tcp: true
+    udp: false
+  - id: 1812
+    name: radius
+    tcp: true
+    udp: true
+  - id: 1813
+    name: radius-acct
+    tcp: true
+    udp: true
+  - !inferred_record
+    id: !unprivileged 2083
+    name: radsec
+    tcp: true
+    udp: true
+"""
+
+        result = subprocess.run(
+            [self.command
+            , "--aoh=deep"
+            , lhs_file]
+            , stdout=subprocess.PIPE
+            , input=rhs_content
+            , universal_newlines=True
+        )
+
+        # DEBUG
+        # print("Expected:")
+        # print(merged_yaml_content)
+        # print("Got:")
+        # print(result.stdout)
+
+        assert 0 == result.returncode, result.stderr
+        assert merged_yaml_content == result.stdout

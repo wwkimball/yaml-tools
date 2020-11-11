@@ -50,3 +50,10 @@ class Test_common_nodes():
         new_node = Nodes.apply_yaml_tag(tagged_node, new_tag)
         assert not hasattr(new_node, "tag")
         assert new_node == old_node
+
+
+    ###
+    # tagless_value
+    ###
+    def test_tagless_value_syntax_error(self):
+        assert "[abc" == Nodes.tagless_value("[abc")
