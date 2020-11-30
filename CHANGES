@@ -1,3 +1,11 @@
+3.4.1:
+API Changes:
+* Developers can now delete YAML Path-specified nodes via the Processor class
+  using a new delete_nodes method.  This method takes a YAML Path as its sole
+  positional argument and an optional keyword argument to override automatic
+  detection of the seperator in the YAML Path, pathsep.  This capability had
+  previously been mistakenly limited to use only from the yaml-set CLI tool.
+
 3.4.0:
 Bug Fixes:
 * For the yaml-diff command-line tool, custom identity keys for specific

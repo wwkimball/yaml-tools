@@ -191,6 +191,47 @@ class Processor:
                         .format(value, value_format, str(vex))
                         , str(yaml_path)) from vex
 
+    def delete_nodes(self, yaml_path: Union[YAMLPath, str],
+                     **kwargs: Any) -> None:
+        """
+        Delete nodes matching a given YAML Path in data.
+
+        Structure is not created for paths which indicate nodes at nonexistent
+        locations.
+
+        Parameters:
+        1. yaml_path (Union[YAMLPath, str]) The YAML Path to evaluate
+
+        Keyword Parameters:
+        * pathsep (PathSeperators) Forced YAML Path segment seperator; set
+          only when automatic inference fails; default = PathSeperators.AUTO
+
+        Returns:  N/A
+
+        Raises:
+            - `YAMLPathException` when YAML Path is invalid
+        """
+        if self.data is None:
+            # Nothing to do
+            return
+
+        pathsep: PathSeperators = kwargs.pop("pathsep", PathSeperators.AUTO)
+        if isinstance(yaml_path, str):
+            yaml_path = YAMLPath(yaml_path, pathsep)
+        elif pathsep is not PathSeperators.AUTO:
+            yaml_path.seperator = pathsep
+
+        # Deleting nodes from a DOM while it is being walked is dangerous.  As
+        # such, the target nodes must be wholly gathered up front and then
+        # deleted in reverse order lest ordinal node indicies become incorrect
+        # when deleting preceding nodes.
+        gathered_nodes = []
+        for node_coordinate in self._get_required_nodes(self.data, yaml_path):
+            gathered_nodes.append(node_coordinate)
+
+        if len(gathered_nodes) > 0:
+            self._delete_nodes(gathered_nodes)
+
     # pylint: disable=locally-disabled,too-many-branches,too-many-locals
     def _get_nodes_by_path_segment(self, data: Any,
                                    yaml_path: YAMLPath, segment_index: int,
@@ -1184,6 +1225,37 @@ class Processor:
                 .format(type(data)),
                 prefix="Processor::_get_optional_nodes:  ", data=data)
             yield NodeCoords(data, parent, parentref, translated_path)
+
+    def _delete_nodes(self, delete_nodes) -> None:
+        """Recursively delete specified nodes."""
+        for delete_nc in reversed(delete_nodes):
+            node = delete_nc.node
+            parent = delete_nc.parent
+            parentref = delete_nc.parentref
+            self.logger.debug(
+                "Deleting node:",
+                prefix="Processor::_delete_nodes:  ",
+                data_header="!" * 80,
+                footer="!" * 80,
+                data=delete_nc)
+
+            # Ensure the reference exists before attempting to delete it
+            if isinstance(node, list) and isinstance(node[0], NodeCoords):
+                self._delete_nodes(node)
+            elif isinstance(node, NodeCoords):
+                self._delete_nodes([node])
+            elif isinstance(parent, dict):
+                if parentref in parent:
+                    del parent[parentref]
+            elif isinstance(parent, list):
+                if len(parent) > parentref:
+                    del parent[parentref]
+            else:
+                # Edge-case:  Attempt to delete from a document which is
+                # entirely one Scalar value OR user is deleting the entire
+                # document.  This is not different from just setting the DOM
+                # to None.
+                self.data = None
 
     # pylint: disable=too-many-arguments
     def _update_node(
