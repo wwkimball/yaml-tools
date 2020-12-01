@@ -232,6 +232,18 @@ class Processor:
         if len(gathered_nodes) > 0:
             self._delete_nodes(gathered_nodes)
 
+    def delete_gathered_nodes(self, delete_nodes: List[NodeCoords]) -> None:
+        """
+        Delete a list of nodes which has already been gathered.
+
+        Parameters:
+        1. delete_nodes:  List[NodeCoords] pre-gathered nodes to affect
+
+        Returns:  N/A
+        """
+        if len(delete_nodes) > 0:
+            self._delete_nodes(delete_nodes)
+
     # pylint: disable=locally-disabled,too-many-branches,too-many-locals
     def _get_nodes_by_path_segment(self, data: Any,
                                    yaml_path: YAMLPath, segment_index: int,
@@ -1226,7 +1238,7 @@ class Processor:
                 prefix="Processor::_get_optional_nodes:  ", data=data)
             yield NodeCoords(data, parent, parentref, translated_path)
 
-    def _delete_nodes(self, delete_nodes) -> None:
+    def _delete_nodes(self, delete_nodes: List[NodeCoords]) -> None:
         """Recursively delete specified nodes."""
         for delete_nc in reversed(delete_nodes):
             node = delete_nc.node

@@ -376,39 +376,6 @@ def _try_load_input_file(args, log, yaml, change_path, new_value):
         yaml_data = Nodes.build_next_node(change_path, 0, new_value)
     return yaml_data
 
-def _delete_nodes(log, delete_nodes) -> None:
-    """Recursively delete specified nodes."""
-    for delete_nc in reversed(delete_nodes):
-        node = delete_nc.node
-        parent = delete_nc.parent
-        parentref = delete_nc.parentref
-        log.debug(
-            "Deleting node:",
-            prefix="yaml_set::delete_nodes:  ",
-            data_header="!" * 80,
-            footer="!" * 80,
-            data=delete_nc)
-
-        # Ensure the reference exists before attempting to delete it
-        if isinstance(node, list) and isinstance(node[0], NodeCoords):
-            _delete_nodes(log, node)
-        elif isinstance(node, NodeCoords):
-            _delete_nodes(log, [node])
-        elif isinstance(parent, dict):
-            if parentref in parent:
-                del parent[parentref]
-        elif isinstance(parent, list):
-            if len(parent) > parentref:
-                del parent[parentref]
-        else:
-            # Edge-case:  Attempt to delete from a document which is
-            # entirely one Scalar value OR user is deleting the entire
-            # document.
-            log.critical(
-                "Refusing to delete the entire document!  Ensure the source"
-                " document is YAML, JSON, or compatible and --change|-g is"
-                " non-empty and not the document root.", 1)
-
 def _get_nodes(log, processor, yaml_path, **kwargs):
     """Gather requested nodes."""
     must_exist = kwargs.pop("must_exist", False)
@@ -634,7 +601,7 @@ def main():
         # Destroy the collected nodes (from their parents) in the reverse order
         # they were discovered.  This is necessary lest Array elements be
         # improperly handled, leading to unwanted data loss.
-        _delete_nodes(log, change_node_coordinates)
+        processor.delete_gathered_nodes(change_node_coordinates)
     elif args.aliasof:
         # Assign the change nodes as Aliases of whatever --aliasof points to
         _alias_nodes(
